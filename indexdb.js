@@ -76,6 +76,8 @@ function indexeddbProvider($windowProvider) {
                 model.caseInsensitive = false; //default caseInsensitive value
                 model.hasFilter = false;
                 model.filterFunction = null;
+                model.whereInValues = null;
+                model.whereNotInValues = null;
 
                 //wrapper for calling default getAll with callback for success
                 function _get(callback, readwrite) {
@@ -123,6 +125,223 @@ function indexeddbProvider($windowProvider) {
                     }
 
                     return value;
+                }
+
+                //private : function for where not in logic 
+                function _whereNotIn(result, outcome, notInCaseInsensitiveArray) {
+                    //case sensitive 
+                    if (model.caseInsensitive) {
+                        var resultKey = _changeCase(result.key);
+                        model.whereNotInValues.forEach(function (value) {
+                            var lowerValue = _changeCase(angular.copy(value));
+                            if (lowerValue === resultKey && notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
+                                notInCaseInsensitiveArray.push(resultKey);
+                            }
+                        });
+
+                        if (notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
+                            outcome.push(result.value);
+                        }
+
+                    } else {
+                        if (model.whereNotInValues.indexOf(result.key) === -1) {
+                            outcome.push(result.value);
+                        }
+                    }
+
+                    result.continue();
+                }
+
+                //private : function for where in logic 
+                function _wherIn(result, outcome, count) {
+                    //if case sensitive then checking throughout th database
+                    if (model.caseInsensitive) {
+                        var resultKey;
+                        resultKey = _changeCase(result.key);
+                        model.whereInValues.forEach(function (value) {
+                            var lowerValue = _changeCase(angular.copy(value));
+                            if (lowerValue === resultKey) {
+                                outcome.push(result.value);
+                            }
+                        });
+
+                        result.continue();
+                        return 0;
+                    }
+                    //case for case sensitive
+                    //if key greater than current value
+                    if (result.key > model.whereInValues[count]) {
+                        count = count + 1;
+                        result.continue();
+                        return count;
+                    }
+
+                    //if key not equal to current value then jumping to next
+                    if (result.key !== model.whereInValues[count]) {
+                        result.continue(model.whereInValues[count]);
+                        return count;
+                    } //pushing to outcome array
+                    outcome.push(result.value);
+                    count = count + 1;
+                    result.continue(model.whereInValues[count]);
+                    return count;
+
+
+                }
+
+                //private : function returns new object value to be updated
+                function _updateValue(result, data) {
+                    var newValue = angular.copy(result.value);
+
+                    var properties = Object.keys(data);
+                    properties.forEach(function (property) {
+                        newValue[property] = data[property];
+                    });
+
+                    if (table.hasTimeStamp) {
+                        newValue.updatedAt = Date.parse(Date());
+                    }
+
+                    return newValue;
+                }
+
+                function _whereInUpdate(result, count, data) {
+                    var toUpdate = false;
+                    var newValue = _updateValue(result, data);
+
+                    //if case sensitive then checking throughout th database
+                    if (model.caseInsensitive) {
+                        var resultKey;
+                        resultKey = _changeCase(result.key);
+                        model.whereInValues.forEach(function (value) {
+                            var lowerValue = _changeCase(angular.copy(value));
+                            if (lowerValue === resultKey) {
+                                toUpdate = true;
+                            }
+                        });
+
+
+                        if (toUpdate) {
+                            result.update(newValue);
+                        }
+
+                        result.continue();
+                        return 0;
+                    }
+                    //case for case sensitive
+                    //if key greater than current value
+                    if (result.key > model.whereInValues[count]) {
+                        result.continue();
+                        count = count + 1;
+                        return count;
+                    }
+
+                    //if key not equal to current value then jumping to next
+                    if (result.key !== model.whereInValues[count]) {
+                        result.continue(model.whereInValues[count]);
+                        return count;
+
+                    }
+                    //pushing to outcome array
+                    result.update(newValue);
+                    count = count + 1;
+                    result.continue(model.whereInValues[count]);
+                    return count;
+
+                }
+
+                //private : function for where not in logic 
+                function _whereNotInUpdate(result, notInCaseInsensitiveArray, data) {
+                    //case sensitive 
+                    var newValue = _updateValue(result, data);
+                    if (model.caseInsensitive) {
+                        var resultKey = _changeCase(result.key);
+                        model.whereNotInValues.forEach(function (value) {
+                            var lowerValue = _changeCase(angular.copy(value));
+                            if (lowerValue === resultKey && notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
+                                notInCaseInsensitiveArray.push(resultKey);
+                            }
+                        });
+
+                        if (notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
+                            result.update(newValue);
+                        }
+
+                    } else {
+                        if (model.whereNotInValues.indexOf(result.key) === -1) {
+                            result.update(newValue);
+                        }
+                    }
+
+                    result.continue();
+                }
+
+
+                function _whereInDestroy(result, count) {
+                    var toDelete = false;
+
+                    //if case sensitive then checking throughout th database
+                    if (model.caseInsensitive) {
+                        var resultKey;
+                        resultKey = _changeCase(result.key);
+                        model.whereInValues.forEach(function (value) {
+                            var lowerValue = _changeCase(angular.copy(value));
+                            if (lowerValue === resultKey) {
+                                toDelete = true;
+                            }
+                        });
+
+
+                        if (toDelete) {
+                            result.delete();
+                        }
+                        result.continue();
+                        return 0;
+                    }
+
+                    //case for case sensitive
+                    //if key greater than current value
+                    if (result.key > model.whereInValues[count]) {
+                        result.continue();
+                        count = count + 1;
+                        return count;
+                    }
+
+                    //if key not equal to current value then jumping to next
+                    if (result.key !== model.whereInValues[count]) {
+                        result.continue(model.whereInValues[count]);
+                        return count;
+                    }
+                    //pushing to outcome array
+                    result.delete();
+                    count = count + 1;
+                    result.continue(model.whereInValues[count]);
+                    return count;
+
+                }
+
+                function _wherNotInDestroy(result, notInCaseInsensitiveArray) {
+                    //case sensitive 
+                    if (model.caseInsensitive) {
+                        var resultKey = _changeCase(result.key);
+                        model.whereNotInValues.forEach(function (value) {
+                            var lowerValue = _changeCase(angular.copy(value));
+                            if (lowerValue === resultKey && notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
+                                notInCaseInsensitiveArray.push(resultKey);
+                            }
+                        });
+
+                        if (notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
+                            result.delete();
+                        }
+
+                    } else {
+                        if (model.whereNotInValues.indexOf(result.key) === -1) {
+                            result.delete();
+                        }
+                    }
+
+                    result.continue();
                 }
 
                 //selecting index to make searches upon
@@ -274,63 +493,8 @@ function indexeddbProvider($windowProvider) {
 
                 //where in function
                 model.whereIn = function (inValues) {
-                    var count = 0;
                     inValues = inValues.sort();
-
-                    model.getAll = function () {
-                        var outcome = [];
-                        var getId = _get(function (event, resolve) {
-                            var result = event.target.result;
-
-                            if (result) {
-                                //if model has filter
-                                if (model.hasFilter) {
-                                    if (model.filterFunction(result.value) !== true) {
-                                        result.continue();
-                                        return;
-                                    }
-                                }
-
-                                //if case sensitive then checking throughout th database
-                                if (model.caseInsensitive) {
-                                    var resultKey;
-                                    resultKey = _changeCase(result.key);
-                                    inValues.forEach(function (value) {
-                                        var lowerValue = _changeCase(angular.copy(value));
-                                        if (lowerValue === resultKey) {
-                                            outcome.push(result.value);
-                                        }
-                                    });
-
-                                    result.continue();
-                                } else {
-                                    //case for string sensitive
-                                    //if key greater than current value
-                                    if (result.key > inValues[count]) {
-                                        result.continue();
-                                    } else {
-
-                                        //if key not equal to current value then jumping to next
-                                        if (result.key !== inValues[count]) {
-                                            result.continue(inValues[count]);
-
-                                        } else {
-                                            //pushing to outcome array
-                                            outcome.push(result.value);
-                                            count = count + 1;
-                                            result.continue(inValues[count]);
-                                        }
-                                    }
-
-                                }
-
-                            } else {
-                                resolve(outcome);
-                            }
-                        });
-
-                        return getId;
-                    };
+                    model.whereInValues = inValues;
 
                     return model;
                 };
@@ -366,6 +530,8 @@ function indexeddbProvider($windowProvider) {
                 //function is default getAll function retrieves all data
                 model.getAll = function () {
                     var outcome = [];
+                    var count = 0;
+                    var notInCaseInsensitiveArray = [];
 
                     var getId = _get(function (event, resolve) {
                         var result = event.target.result;
@@ -377,9 +543,16 @@ function indexeddbProvider($windowProvider) {
                                     return;
                                 }
                             }
+                            if (model.whereInValues !== null) {
 
-                            outcome.push(result.value);
-                            result.continue();
+                                count = _wherIn(result, outcome, count);
+                            } else if (model.whereNotInValues !== null) {
+                                _whereNotIn(result, outcome, notInCaseInsensitiveArray);
+                            } else {
+                                outcome.push(result.value);
+                                result.continue();
+                            }
+
                         } else {
                             resolve(outcome);
                         }
@@ -390,50 +563,9 @@ function indexeddbProvider($windowProvider) {
                 //function fires where not in equivalent
                 model.whereNotIn = function (notInValues) {
 
-                    model.getAll = function () {
-                        var outcome = [];
-                        var notInCaseInsensitiveArray = [];
+                    notInValues = notInValues.sort();
+                    model.whereNotInValues = notInValues;
 
-                        var getId = _get(function (event, resolve) {
-                            var result = event.target.result;
-                            if (result) {
-
-                                //if model has filter
-                                if (model.hasFilter) {
-                                    if (model.filterFunction(result.value) !== true) {
-                                        result.continue();
-                                        return;
-                                    }
-                                }
-
-                                //case sensitive 
-                                if (model.caseInsensitive) {
-                                    var resultKey = _changeCase(result.key);
-                                    notInValues.forEach(function (value) {
-                                        var lowerValue = _changeCase(angular.copy(value));
-                                        if (lowerValue === resultKey && notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
-                                            notInCaseInsensitiveArray.push(resultKey);
-                                        }
-                                    });
-
-                                    if (notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
-                                        outcome.push(result.value);
-                                    }
-
-                                } else {
-                                    if (notInValues.indexOf(result.key) === -1) {
-                                        outcome.push(result.value);
-                                    }
-                                }
-
-                                result.continue();
-                            } else {
-                                resolve(outcome);
-                            }
-                        });
-
-                        return getId;
-                    };
                     return model;
                 };
 
@@ -474,8 +606,10 @@ function indexeddbProvider($windowProvider) {
                         throw "Data must be type of object";
                     }
 
+                    var count = 0;
+                    var notInCaseInsensitiveArray = [];
+
                     var update = _get(function (event, resolve) {
-                        var property;
                         var result = event.target.result;
                         var newValue;
 
@@ -488,18 +622,19 @@ function indexeddbProvider($windowProvider) {
                                     return;
                                 }
                             }
-                            newValue = angular.copy(result.value);
 
-                            for (property in data) {
-                                newValue[property] = data[property];
+                            //case if where in
+                            if (model.whereInValues !== null) {
+                                count = _whereInUpdate(result, count, data);
+
+                            } else if (model.whereNotInValues !== null) {
+                                _whereNotInUpdate(result, notInCaseInsensitiveArray, data);
+
+                            } else {
+                                newValue = _updateValue(result, data);
+                                result.update(newValue);
+                                result.continue();
                             }
-
-                            if (table.hasTimeStamp) {
-                                newValue.updatedAt = Date.parse(Date());
-                            }
-
-                            result.update(newValue);
-                            result.continue();
 
                         } else {
                             resolve();
@@ -515,26 +650,19 @@ function indexeddbProvider($windowProvider) {
                     return model;
                 };
 
-                model.delete = function () {
+                model.delete = function (value) {
 
+                    if (value === undefined) {
+                        throw "Empty value provided for deleting";
+                    }
                     var deleteId = $q(function (resolve, reject) {
                         connection = self.indexdb.open(self.name);
                         connection.onsuccess = function (event) {
                             var db = event.target.result;
-                            transaction = db.transaction([table.name]);
+                            transaction = db.transaction([table.name], 'readwrite');
                             objectStore = transaction.objectStore(table.name);
-                            if (model.index !== null) {
-                                objectStore.index(model.index);
-                            }
 
-                            if (model.bound === null) {
-                                throw "Invalid query supplied. Cannot delete complete database";
-                            }
-
-
-                            objectStore.delete(model.bound).onsuccess = function () {
-                                resolve();
-                            };
+                            objectStore.delete(value);
 
                             transaction.oncomplete = function () {
                                 resolve();
@@ -554,6 +682,9 @@ function indexeddbProvider($windowProvider) {
                 };
 
                 model.destroy = function () {
+                    var count = 0;
+                    var notInCaseInsensitiveArray = [];
+
                     var del = _get(function (event, resolve) {
                         var result = event.target.result;
 
@@ -566,8 +697,17 @@ function indexeddbProvider($windowProvider) {
                                 }
                             }
 
-                            result.delete();
-                            result.continue();
+                            if (model.whereInValues !== null) {
+                                count = _whereInDestroy(result, count);
+
+                            } else if (model.whereNotInValues !== null) {
+                                _wherNotInDestroy(result, notInCaseInsensitiveArray);
+
+                            } else {
+
+                                result.delete();
+                                result.continue();
+                            }
                         } else {
                             resolve();
                         }
@@ -698,7 +838,7 @@ function indexeddbProvider($windowProvider) {
                 }
 
             }).catch(function (event) {
-                console.log(event);
+                throw event;
             });
 
         }
