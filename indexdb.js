@@ -4,7 +4,6 @@ function indexeddbProvider($windowProvider) {
     'use strict';
     var $window = $windowProvider.$get();
 
-    $window.indexedDB.deleteDatabase('test');
     var dbName, dbVersion, dbTables;
     dbName = 'test';
     dbVersion = 1;
@@ -400,9 +399,32 @@ function indexeddbProvider($windowProvider) {
 
 
                 //private : function calls relation tables and fetches their data
-                function _getWithAllData(resolve, reject, outcome, objectStoreTables) {
-                    if (outcome.length === 0) {
-                        resolve(outcome);
+                /**
+                 * private : function calls relation tables and fetches their data
+                 * @param  {[type]}  resolve           [description]
+                 * @param  {[type]}  reject            [description]
+                 * @param  {array/objcet}  outcome           [contains main table record(s)]
+                 * @param  {object}  objectStoreTables [with tables in transaction mode]
+                 * @param  {Boolean} isFind            [true for find condition]
+                 */
+                function _getWithAllData(resolve, reject, outcome, objectStoreTables, isFind) {
+
+                    //setting default value for isFind
+                    isFind = (isFind === undefined) ? false : isFind;
+
+                    //checking if outcome is not empty
+                    if (isFind) {
+                        if (outcome === undefined) {
+
+                            resolve(outcome);
+                            return;
+                        }
+
+                    } else {
+                        if (outcome.length === 0) {
+                            resolve(outcome);
+                            return;
+                        }
                     }
                     var _id, withTablesCount, relationNames;
 
@@ -417,16 +439,21 @@ function indexeddbProvider($windowProvider) {
                     relationNames.forEach(function (withTableName) {
 
                         //retrieving main relationship join data 
-                        outcome.forEach(function (record) {
-                            var d = angular.copy(record[model.originalWithRelation[withTableName].field]);
-                            if (d !== undefined && d.constructor === Array) {
-                                d.forEach(function (id) {
-                                    if (_id.indexOf(id) === -1) {
-                                        _id.push(id);
-                                    }
-                                });
-                            }
-                        });
+                        if (isFind) {
+                            _id = angular.copy(outcome[model.originalWithRelation[withTableName].field]);
+
+                        } else {
+                            outcome.forEach(function (record) {
+                                var d = angular.copy(record[model.originalWithRelation[withTableName].field]);
+                                if (d !== undefined && d.constructor === Array) {
+                                    d.forEach(function (id) {
+                                        if (_id.indexOf(id) === -1) {
+                                            _id.push(id);
+                                        }
+                                    });
+                                }
+                            });
+                        }
 
                         var count = 0;
                         var currentOutcome = [];
@@ -458,17 +485,36 @@ function indexeddbProvider($windowProvider) {
 
                             } else {
                                 //when traversing is done
-                                outcome.forEach(function (record) {
-                                    record.Relations = record.Relations || {};
-                                    record.Relations[withTableName] = [];
 
+                                if (isFind) {
+                                    //setting relation object to main outcome
+                                    outcome.Relations = outcome.Relations || {};
+                                    outcome.Relations[withTableName] = [];
+
+                                    //adding those with relation records which have relation with current record
                                     currentOutcome.forEach(function (currentRecord) {
                                         //adding the records to the main table 
-                                        if (record[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
-                                            record.Relations[withTableName].push(currentRecord);
+                                        if (outcome[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
+                                            outcome.Relations[withTableName].push(currentRecord);
                                         }
                                     });
-                                });
+
+
+                                } else {
+                                    outcome.forEach(function (record) {
+                                        //setting relation object to main outcome
+                                        record.Relations = record.Relations || {};
+                                        record.Relations[withTableName] = [];
+
+                                        //adding those with relation records which have relation with current record
+                                        currentOutcome.forEach(function (currentRecord) {
+                                            //adding the records to the main table 
+                                            if (record[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
+                                                record.Relations[withTableName].push(currentRecord);
+                                            }
+                                        });
+                                    });
+                                }
 
                                 currentCount = currentCount + 1;
 
@@ -540,11 +586,11 @@ function indexeddbProvider($windowProvider) {
                                 model.bound = self.keyRange.upperBound(upper, incUpper);
 
                             } else if (model.bound.upper === undefined) {
-                            //if upper bound is undefined then setting only upper bound
+                                //if upper bound is undefined then setting only upper bound
                                 model.bound = self.keyRange.lowerBound(lower, incLower);
 
                             } else {
-                            //else setting both bound values
+                                //else setting both bound values
                                 model.bound = self.keyRange.bound(lower, upper, incLower, incUpper);
                             }
 
@@ -558,10 +604,23 @@ function indexeddbProvider($windowProvider) {
                 model.find = function () {
 
                     var getId = $q(function (resolve, reject) {
+                        var transactionTables = [];
+                        var relations = {};
+
                         connection = self.indexdb.open(self.name);
                         connection.onsuccess = function (event) {
                             var db = event.target.result;
-                            transaction = db.transaction([table.name]);
+
+                            transactionTables = _getTransactionTables();
+                            transaction = db.transaction(transactionTables);
+
+                            if (model.hasWith) {
+                                transactionTables.splice(0, 1);
+                                transactionTables.forEach(function (withTableName) {
+                                    relations[withTableName] = transaction.objectStore(withTableName);
+                                });
+                            }
+
                             objectStore = transaction.objectStore(table.name);
 
                             //if index is set then searching on the index
@@ -569,7 +628,13 @@ function indexeddbProvider($windowProvider) {
                                 objectStore = objectStore.index(model.index);
                             }
                             objectStore.get(model.bound).onsuccess = function (record) {
-                                resolve(record.target.result);
+
+                                if (model.hasWith) {
+                                    _getWithAllData(resolve, reject, record.target.result, relations, true);
+
+                                } else {
+                                    resolve(record.target.result);
+                                }
                             };
 
 
@@ -1084,8 +1149,7 @@ function indexeddbProvider($windowProvider) {
                     _createTables(event.target.result);
 
                 } else {
-
-                    this.tables.forEach(function (table) {
+                    self.tables.forEach(function (table) {
                         self.models[table.name] = new CreateModel(table);
                     });
                 }
