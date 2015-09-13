@@ -518,8 +518,39 @@ function indexeddbProvider($windowProvider) {
 
                 //sets searches to case sensitive
                 model.setCaseInsensitive = function (value) {
+                    var lower, upper, incUpper, incLower;
+
                     value = (value === undefined || value === true) ? true : false;
                     model.caseInsensitive = value;
+
+                    //if model has been set to case insensitive and bound values are defined then
+                    if (model.caseInsensitive && model.bound !== null) {
+
+                        //case not of equal
+                        if (model.bound.lower !== model.bound.upper) {
+
+                            //setting bound values against case insensitive
+                            lower = _changeCase(angular.copy(model.bound.lower), true);
+                            incLower = (model.bound.lowerOpen === undefined) ? false : angular.copy(model.bound.lowerOpen);
+                            upper = _changeCase(angular.copy(model.bound.upper));
+                            incUpper = (model.bound.upper === undefined) ? false : angular.copy(model.bound.upper);
+
+                            //if lower bound is undefined then setting only upper bound
+                            if (model.bound.lower === undefined) {
+                                model.bound = self.keyRange.upperBound(upper, incUpper);
+
+                            } else if (model.bound.upper === undefined) {
+                            //if upper bound is undefined then setting only upper bound
+                                model.bound = self.keyRange.lowerBound(lower, incLower);
+
+                            } else {
+                            //else setting both bound values
+                                model.bound = self.keyRange.bound(lower, upper, incLower, incUpper);
+                            }
+
+                        }
+                    }
+
                     return model;
                 };
 
