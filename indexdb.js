@@ -336,7 +336,7 @@ function indexeddbProvider($windowProvider) {
 
 
                 //private : where in logic for deleting object
-                function _whereInDestroy(result, count) {
+                function _whereInDestroy(result, count, deletedIds) {
                     var toDelete = false;
 
                     //if case sensitive then checking throughout th database
@@ -352,6 +352,7 @@ function indexeddbProvider($windowProvider) {
 
                         //if to delete is set then deleting
                         if (toDelete) {
+                            deletedIds.push(result.value[table.fields.keyPathField]);
                             result.delete();
                         }
                         result.continue();
@@ -371,6 +372,9 @@ function indexeddbProvider($windowProvider) {
                         result.continue(model.whereInValues[count]);
                         return count;
                     }
+
+                    deletedIds.push(result.value[table.fields.keyPathField]);
+
                     //pushing to outcome array
                     result.delete();
                     count = count + 1;
@@ -379,7 +383,7 @@ function indexeddbProvider($windowProvider) {
                 }
 
                 //private : where not in logic for deleting
-                function _wherNotInDestroy(result, notInCaseInsensitiveArray) {
+                function _wherNotInDestroy(result, notInCaseInsensitiveArray, deletedIds) {
                     //case sensitive 
                     if (model.caseInsensitive) {
                         var resultKey = _changeCase(result.key);
@@ -391,11 +395,13 @@ function indexeddbProvider($windowProvider) {
                         });
 
                         if (notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
+                            deletedIds.push(result.value[table.fields.keyPathField]);
                             result.delete();
                         }
 
                     } else {
                         if (model.whereNotInValues.indexOf(result.key) === -1) {
+                            deletedIds.push(result.value[table.fields.keyPathField]);
                             result.delete();
                         }
                     }
@@ -409,7 +415,7 @@ function indexeddbProvider($windowProvider) {
                  * private : function calls relation tables and fetches their data
                  * @param  {[type]}  resolve           [description]
                  * @param  {[type]}  reject            [description]
-                 * @param  {array/objet}  outcome           [contains main table record(s)]
+                 * @param  {array/object}  outcome           [contains main table record(s)]
                  * @param  {object}  objectStoreTables [with tables in transaction mode]
                  * @param  {Boolean} isFind            [true for find condition]
                  */
@@ -539,6 +545,14 @@ function indexeddbProvider($windowProvider) {
 
                 }
 
+                /**
+                 * private : function adds relation id to related tables. If many relation is set then also adds the relation tables record ids to the main table for creating many to many
+                 * @param {resolve} resolve           [resolves the promise]
+                 * @param {reject} reject            [rejects the promise]
+                 * @param {integer} outcome           [contains newly created records key path value]
+                 * @param {object} objectStoreTables [with tables in transaction mode]
+                 * @param {IDBTransaction} transaction       [transaction instance]
+                 */
                 function _addWithData(resolve, reject, outcome, objectStoreTables, transaction) {
                     var withTablesCount, relationNames;
 
@@ -549,8 +563,8 @@ function indexeddbProvider($windowProvider) {
                     var manyOutcome = {};
 
                     relationNames.forEach(function (withTableName) {
-                        var hasFilter = false;
-                        var isMany = false;
+                        var hasFilter = false; //setting if with table has filter
+                        var isMany = false; //if main table is in many to many relationship
                         var many = [];
 
                         //if filter was set in relation then setting hasFilter flag
@@ -558,16 +572,16 @@ function indexeddbProvider($windowProvider) {
                             hasFilter = true;
                         }
 
+                        //setting flag for many to many
                         if (typeof model.originalWithRelation[withTableName].many === 'object') {
-                            if (model.originalWithRelation[withTableName].many.isMany) {
+                            if (model.originalWithRelation[withTableName].many.isMany === true) {
                                 isMany = true;
                             }
                         }
 
-
+                        //opening cursor on relation table
                         objectStoreTables[withTableName].openCursor().onsuccess = function (event) {
                             var cursor = event.target.result;
-
 
                             if (cursor) {
                                 var newValue = _updateValue(cursor.value, {}, true);
@@ -606,6 +620,7 @@ function indexeddbProvider($windowProvider) {
                             } else {
                                 currentCount = currentCount + 1;
 
+                                //case for may then adding many relation to newly created object
                                 if (isMany) {
                                     manyOutcome[model.originalWithRelation[withTableName].many.field] = many;
                                 }
@@ -634,6 +649,82 @@ function indexeddbProvider($windowProvider) {
                         };
 
                         objectStoreTables[withTableName].openCursor().onerror = function (error) {
+                            reject(error);
+                        };
+                    });
+                }
+
+                /**
+                 * private : function delete the record relation to other tables
+                 * @param  {resolve}  resolve           [resolves the promise]
+                 * @param  {reject}  reject            [reject the promise]
+                 * @param  {array/integer}  value             [contains the id(s) of records delete]
+                 * @param  {object}  objectStoreTables [with tables in transaction mode]
+                 * @param  {Boolean} isDestroy         [for destroy mode]
+                 */
+                function _deleteWith(resolve, reject, value, objectStoreTables, isDestroy) {
+                    isDestroy = (isDestroy === undefined) ? false : isDestroy;
+                    var withTablesCount, relationNames;
+
+                    relationNames = Object.keys(objectStoreTables); //getting relational table names
+                    withTablesCount = relationNames.length;
+
+                    var currentCount = 0;
+                    var bound;
+
+                    //setting bound values for cursor location
+                    if (isDestroy) {
+                        value = value.sort();
+                        bound = self.keyRange.bound(value[0], value[(value.length - 1)]);
+                    } else {
+                        bound = self.keyRange.only(value);
+                    }
+
+                    relationNames.forEach(function (withTableName) {
+                        objectStoreTables[withTableName].index(model.originalWithRelation[withTableName].field).openCursor(bound).onsuccess = function (event) {
+                            var cursor = event.target.result;
+                            if (cursor) {
+                                var newValue = _updateValue(cursor.value, {}, true);
+                                if (newValue[model.originalWithRelation[withTableName].field] === undefined) {
+                                    cursor.continue();
+                                    return;
+                                }
+
+                                var index;
+                                if (isDestroy) {
+                                    value.forEach(function (_id) {
+                                        index = newValue[model.originalWithRelation[withTableName].field].indexOf(_id);
+
+                                        if (index !== -1) {
+                                            newValue[model.originalWithRelation[withTableName].field].splice(index, 1);
+                                        }
+                                    });
+                                } else {
+                                    index = newValue[model.originalWithRelation[withTableName].field].indexOf(value);
+
+                                    if (index === -1) {
+                                        cursor.continue();
+                                        return;
+                                    }
+
+                                    newValue[model.originalWithRelation[withTableName].field].splice(index, 1);
+                                }
+
+
+                                cursor.update(newValue);
+                                cursor.continue();
+
+                            } else {
+
+                                currentCount = currentCount + 1;
+
+                                if (currentCount === withTablesCount) {
+                                    resolve();
+                                }
+                            }
+                        };
+
+                        objectStoreTables[withTableName].onerror = function (error) {
                             reject(error);
                         };
                     });
@@ -1070,18 +1161,33 @@ function indexeddbProvider($windowProvider) {
                     }
 
                     var deleteId = $q(function (resolve, reject) {
-
                         connection = self.indexdb.open(self.name);
                         connection.onsuccess = function (event) {
 
                             var db = event.target.result;
-                            transaction = db.transaction([table.name], 'readwrite');
+                            var relations = {};
+
+                            var transactionTables = _getTransactionTables();
+                            transaction = db.transaction(transactionTables, 'readwrite');
+
+                            if (model.hasWith) {
+                                transactionTables.splice(0, 1);
+                                transactionTables.forEach(function (withTableName) {
+                                    relations[withTableName] = transaction.objectStore(withTableName);
+                                });
+                            }
+
                             objectStore = transaction.objectStore(table.name);
 
-                            objectStore.delete(value); //firing default delete
+                            objectStore = objectStore.delete(value); //firing default delete
 
-                            transaction.oncomplete = function () {
-                                resolve();
+                            objectStore.onsuccess = function () {
+
+                                if (model.hasWith) {
+                                    _deleteWith(resolve, reject, value, relations);
+                                } else {
+                                    resolve();
+                                }
                             };
 
                             transaction.onerror = function (err) {
@@ -1101,8 +1207,9 @@ function indexeddbProvider($windowProvider) {
                 model.destroy = function () {
                     var count = 0;
                     var notInCaseInsensitiveArray = [];
+                    var deletedIds = [];
 
-                    var del = _get(function (event, resolve) {
+                    var del = _get(function (event, resolve, reject, relations) {
                         var result = event.target.result;
 
                         if (result) {
@@ -1116,18 +1223,23 @@ function indexeddbProvider($windowProvider) {
 
                             //first whereIn then whereNotIn else default destroy
                             if (model.whereInValues !== null) {
-                                count = _whereInDestroy(result, count);
+                                count = _whereInDestroy(result, count, deletedIds);
 
                             } else if (model.whereNotInValues !== null) {
-                                _wherNotInDestroy(result, notInCaseInsensitiveArray);
+                                _wherNotInDestroy(result, notInCaseInsensitiveArray, deletedIds);
 
                             } else {
-
+                                deletedIds.push(result.value[table.fields.keyPathField]);
                                 result.delete();
                                 result.continue();
                             }
                         } else {
-                            resolve();
+
+                            if (model.hasWith) {
+                                _deleteWith(resolve, reject, deletedIds, relations, true);
+                            } else {
+                                resolve();
+                            }
                         }
                     }, true);
 
