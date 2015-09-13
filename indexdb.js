@@ -113,20 +113,18 @@ function indexeddbProvider($windowProvider) {
                         connection.onsuccess = function (event) {
 
                             var db = event.target.result;
+                            //opening transaction
+                            transactionTables = _getTransactionTables();
+                            transaction = db.transaction(transactionTables, write);
 
                             //if model has with relation 
-                            transactionTables = _getTransactionTables();
-
                             if (model.hasWith) {
-
                                 transactionTables.splice(0, 1);
                                 transactionTables.forEach(function (tableName) {
                                     relations[tableName] = transaction.objectStore(tableName);
                                 });
-                            }
 
-                            //opening transaction
-                            transaction = db.transaction(transactionTables, write);
+                            }
 
                             objectStore = transaction.objectStore(table.name);
 
@@ -403,6 +401,9 @@ function indexeddbProvider($windowProvider) {
 
                 //private : function calls relation tables and fetches their data
                 function _getWithAllData(resolve, reject, outcome, objectStoreTables) {
+                    if (outcome.length === 0) {
+                        resolve(outcome);
+                    }
                     var _id, withTablesCount, relationNames;
 
                     relationNames = Object.keys(objectStoreTables); //getting relational table names
@@ -429,6 +430,12 @@ function indexeddbProvider($windowProvider) {
 
                         var count = 0;
                         var currentOutcome = [];
+                        var hasFilter = false;
+
+                        //if filter was set in relation then setting hasFilter flag
+                        if (typeof model.originalWithRelation[withTableName].filter === 'function') {
+                            hasFilter = true;
+                        }
 
                         _id = _id.sort();
 
@@ -436,6 +443,17 @@ function indexeddbProvider($windowProvider) {
                         objectStoreTables[withTableName].openCursor(self.keyRange.bound(_id[0], _id[(_id.length - 1)])).onsuccess = function (event) {
                             var cursor = event.target.result;
                             if (cursor) {
+
+                                //if relation has filter
+                                if (hasFilter) {
+
+                                    if (model.originalWithRelation[withTableName].filter(cursor.value) !== true) {
+                                        count = count + 1;
+                                        cursor.continue(_id[count]);
+                                        return;
+                                    }
+                                }
+
                                 count = _whereIn(cursor, currentOutcome, count, _id, false);
 
                             } else {
@@ -928,7 +946,7 @@ function indexeddbProvider($windowProvider) {
 
 
             /**
-             * Private : function creates tables when updgrade function is fired
+             * Private : function creates tables when upgrade function is fired
              * @param  {event.target.result} db [it of result of event of upgradedneeded]
              */
             function _createTables(db) {
