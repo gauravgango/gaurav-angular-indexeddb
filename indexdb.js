@@ -240,15 +240,21 @@ function indexeddbProvider($windowProvider) {
                 }
 
                 //private : function returns new object value to be updated with timestamps
-                function _updateValue(result, data) {
-                    var newValue = angular.copy(result.value);
+                function _updateValue(result, data, hasTimeStamp) {
+                    hasTimeStamp = (hasTimeStamp === undefined) ? false : hasTimeStamp;
+
+                    var newValue = angular.copy(result);
 
                     var properties = Object.keys(data);
                     properties.forEach(function (property) {
                         newValue[property] = data[property];
                     });
 
-                    if (table.hasTimeStamp) {
+                    if (table.hasTimeStamp && !hasTimeStamp) {
+                        newValue.updatedAt = Date.parse(Date());
+                    }
+
+                    if (hasTimeStamp) {
                         newValue.updatedAt = Date.parse(Date());
                     }
 
@@ -258,7 +264,7 @@ function indexeddbProvider($windowProvider) {
                 //private : where in logic for update condition. When condition passes the system updates the object in current location
                 function _whereInUpdate(result, count, data) {
                     var toUpdate = false;
-                    var newValue = _updateValue(result, data);
+                    var newValue = _updateValue(result.value, data);
 
                     //if case sensitive then checking throughout th database
                     if (model.caseInsensitive) {
@@ -303,7 +309,7 @@ function indexeddbProvider($windowProvider) {
                 //private : function for where not in logic for update scenario
                 function _whereNotInUpdate(result, notInCaseInsensitiveArray, data) {
 
-                    var newValue = _updateValue(result, data); //data to be updated
+                    var newValue = _updateValue(result.value, data); //data to be updated
 
                     //case sensitive 
                     if (model.caseInsensitive) {
@@ -403,7 +409,7 @@ function indexeddbProvider($windowProvider) {
                  * private : function calls relation tables and fetches their data
                  * @param  {[type]}  resolve           [description]
                  * @param  {[type]}  reject            [description]
-                 * @param  {array/objcet}  outcome           [contains main table record(s)]
+                 * @param  {array/objet}  outcome           [contains main table record(s)]
                  * @param  {object}  objectStoreTables [with tables in transaction mode]
                  * @param  {Boolean} isFind            [true for find condition]
                  */
@@ -533,6 +539,106 @@ function indexeddbProvider($windowProvider) {
 
                 }
 
+                function _addWithData(resolve, reject, outcome, objectStoreTables, transaction) {
+                    var withTablesCount, relationNames;
+
+                    relationNames = Object.keys(objectStoreTables); //getting relational table names
+                    withTablesCount = relationNames.length;
+
+                    var currentCount = 0;
+                    var manyOutcome = {};
+
+                    relationNames.forEach(function (withTableName) {
+                        var hasFilter = false;
+                        var isMany = false;
+                        var many = [];
+
+                        //if filter was set in relation then setting hasFilter flag
+                        if (typeof model.originalWithRelation[withTableName].filter === 'function') {
+                            hasFilter = true;
+                        }
+
+                        if (typeof model.originalWithRelation[withTableName].many === 'object') {
+                            if (model.originalWithRelation[withTableName].many.isMany) {
+                                isMany = true;
+                            }
+                        }
+
+
+                        objectStoreTables[withTableName].openCursor().onsuccess = function (event) {
+                            var cursor = event.target.result;
+
+
+                            if (cursor) {
+                                var newValue = _updateValue(cursor.value, {}, true);
+
+                                //if relation has filter
+                                if (hasFilter) {
+                                    if (model.originalWithRelation[withTableName].filter(angular.copy(cursor.value)) !== true) {
+                                        cursor.continue();
+                                        return;
+                                    }
+                                }
+
+                                //if property of relation is undefined then creating one as an array
+                                if (newValue[model.originalWithRelation[withTableName].field] === undefined) {
+                                    newValue[model.originalWithRelation[withTableName].field] = [];
+                                }
+
+                                //if relation does not have the index then adding it to list
+                                if (newValue[model.originalWithRelation[withTableName].field].indexOf(outcome._id) === -1) {
+                                    newValue[model.originalWithRelation[withTableName].field].push(outcome._id);
+
+                                    outcome.Relations = outcome.Relations || {};
+                                    outcome.Relations[withTableName] = outcome.Relations[withTableName] || [];
+
+                                    outcome.Relations[withTableName].push(cursor.value);
+
+                                    //case for many to many
+                                    if (isMany) {
+                                        many.push(cursor.value._id);
+                                    }
+                                }
+
+                                cursor.update(newValue);
+                                cursor.continue();
+
+                            } else {
+                                currentCount = currentCount + 1;
+
+                                if (isMany) {
+                                    manyOutcome[model.originalWithRelation[withTableName].many.field] = many;
+                                }
+
+                                if (currentCount === withTablesCount) {
+
+                                    //if is many relationship then also updating current outcome value
+                                    if (isMany) {
+                                        outcome = _updateValue(outcome, manyOutcome);
+
+                                        var newObjectStore = transaction.objectStore(table.name);
+
+                                        newObjectStore.put(outcome).onsuccess = function () {
+                                            resolve(outcome);
+                                        };
+
+                                        newObjectStore.onerror = function (error) {
+                                            reject(error);
+                                        };
+
+                                    } else {
+                                        resolve(outcome);
+                                    }
+                                }
+                            }
+                        };
+
+                        objectStoreTables[withTableName].openCursor().onerror = function (error) {
+                            reject(error);
+                        };
+                    });
+                }
+
 
                 /**
                  * Function sets the with relations by creating new model instances
@@ -655,11 +761,24 @@ function indexeddbProvider($windowProvider) {
                 model.add = function (data) {
 
                     var add = $q(function (resolve, reject) {
+                        var transactionTables = [];
+                        var relations = {};
 
                         connection = self.indexdb.open(self.name);
                         connection.onsuccess = function (event) {
+
                             var db = event.target.result;
-                            transaction = db.transaction([table.name], "readwrite");
+
+                            transactionTables = _getTransactionTables();
+                            transaction = db.transaction(transactionTables, "readwrite");
+
+                            if (model.hasWith) {
+                                transactionTables.splice(0, 1);
+                                transactionTables.forEach(function (withTableName) {
+                                    relations[withTableName] = transaction.objectStore(withTableName);
+                                });
+                            }
+
                             objectStore = transaction.objectStore(table.name);
                             if (table.hasTimeStamp) {
                                 data.updatedAt = Date.parse(Date());
@@ -673,7 +792,13 @@ function indexeddbProvider($windowProvider) {
 
                                 //adding key path value to the data object after adding
                                 result[table.fields.keyPathField] = event.target.result;
-                                resolve(result);
+
+                                if (model.hasWith) {
+                                    _addWithData(resolve, reject, result, relations, transaction);
+                                } else {
+                                    resolve(result);
+
+                                }
                             };
 
                             transaction.onerror = function (event) {
