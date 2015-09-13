@@ -80,6 +80,18 @@ function indexeddbProvider($windowProvider) {
                 model.withTables = {}; //with tables structure
                 model.hasWith = false; //default has with relation status
 
+                function _resetModel() {
+                    model.bound = null; //default bound value
+                    model.index = null; //default index value
+                    model.caseInsensitive = false; //default caseInsensitive value
+                    model.hasFilter = false; //default if model has filter
+                    model.filterFunction = null; //default filter function
+                    model.whereInValues = null; //default whereInValues for whereIn
+                    model.whereNotInValues = null; //default whereNotInValues for whereNotIn
+                    model.withTables = {}; //with tables structure
+                    model.hasWith = false; //default has with relation status
+                }
+
                 //private : function returns array of table names to perform transaction on
                 function _getTransactionTables() {
                     var transactionTables = [];
@@ -131,6 +143,7 @@ function indexeddbProvider($windowProvider) {
                             if (model.index !== null) {
                                 objectStore = objectStore.index(model.index);
                             }
+
                             objectStore = objectStore.openCursor(model.bound);
 
                             //on success giving callback with promise and relation data
@@ -139,15 +152,18 @@ function indexeddbProvider($windowProvider) {
                             };
 
                             objectStore.onerror = function (event) {
+                                _resetModel();
                                 reject(event.srcElement.error);
                             };
 
                             transaction.onerror = function (err) {
+                                _resetModel();
                                 reject(err.srcElement.error);
                             };
                         };
 
                         connection.onerror = function (err) {
+                            _resetModel();
                             reject(err.srcElement.error);
                         };
                     });
@@ -218,6 +234,7 @@ function indexeddbProvider($windowProvider) {
                         result.continue();
                         return 0;
                     }
+
                     //case for case sensitive
                     //if key greater than current value
                     if (result.key > whereInValues[count]) {
@@ -428,12 +445,14 @@ function indexeddbProvider($windowProvider) {
                     if (isFind) {
                         if (outcome === undefined) {
 
+                            _resetModel();
                             resolve(outcome);
                             return;
                         }
 
                     } else {
                         if (outcome.length === 0) {
+                            _resetModel();
                             resolve(outcome);
                             return;
                         }
@@ -532,6 +551,7 @@ function indexeddbProvider($windowProvider) {
 
                                 //when all of the relation tables have completed traversing then resolving
                                 if (currentCount === withTablesCount) {
+                                    _resetModel();
                                     resolve(outcome);
                                 }
                             }
@@ -539,6 +559,7 @@ function indexeddbProvider($windowProvider) {
 
                         //case or error of in relation object store
                         objectStoreTables[withTableName].openCursor(self.keyRange.bound(_id[0], _id[(_id.length - 1)])).onerror = function (e) {
+                            _resetModel();
                             reject(e);
                         };
                     });
@@ -634,14 +655,17 @@ function indexeddbProvider($windowProvider) {
                                         var newObjectStore = transaction.objectStore(table.name);
 
                                         newObjectStore.put(outcome).onsuccess = function () {
+                                            _resetModel();
                                             resolve(outcome);
                                         };
 
                                         newObjectStore.onerror = function (error) {
+                                            _resetModel();
                                             reject(error);
                                         };
 
                                     } else {
+                                        _resetModel();
                                         resolve(outcome);
                                     }
                                 }
@@ -649,6 +673,7 @@ function indexeddbProvider($windowProvider) {
                         };
 
                         objectStoreTables[withTableName].openCursor().onerror = function (error) {
+                            _resetModel();
                             reject(error);
                         };
                     });
@@ -719,12 +744,14 @@ function indexeddbProvider($windowProvider) {
                                 currentCount = currentCount + 1;
 
                                 if (currentCount === withTablesCount) {
+                                    _resetModel();
                                     resolve();
                                 }
                             }
                         };
 
                         objectStoreTables[withTableName].onerror = function (error) {
+                            _resetModel();
                             reject(error);
                         };
                     });
@@ -830,17 +857,20 @@ function indexeddbProvider($windowProvider) {
                                     _getWithAllData(resolve, reject, record.target.result, relations, true);
 
                                 } else {
+                                    _resetModel();
                                     resolve(record.target.result);
                                 }
                             };
 
 
                             transaction.onerror = function (err) {
+                                _resetModel();
                                 reject(err.srcElement.error);
                             };
                         };
 
                         connection.onerror = function (err) {
+                            _resetModel();
                             reject(err.srcElement.error);
                         };
                     });
@@ -887,18 +917,21 @@ function indexeddbProvider($windowProvider) {
                                 if (model.hasWith) {
                                     _addWithData(resolve, reject, result, relations, transaction);
                                 } else {
+                                    _resetModel();
                                     resolve(result);
 
                                 }
                             };
 
                             transaction.onerror = function (event) {
+                                _resetModel();
                                 reject(event.srcElement.error);
                             };
 
                         };
 
                         connection.onerror = function (event) {
+                            _resetModel();
                             reject(event.srcElement.error);
                         };
                     });
@@ -943,18 +976,21 @@ function indexeddbProvider($windowProvider) {
 
                                     //if inserted count is equal to total no of records then resolving
                                     if (inserted === count) {
+                                        _resetModel();
                                         resolve(outcome);
                                     }
                                 };
                             });
 
                             transaction.onerror = function (event) {
+                                _resetModel();
                                 reject(event.srcElement.error);
                             };
 
                         };
 
                         connection.onerror = function (event) {
+                            _resetModel();
                             reject(event.srcElement.error);
                         };
                     });
@@ -1044,6 +1080,7 @@ function indexeddbProvider($windowProvider) {
                                 _getWithAllData(resolve, reject, outcome, withTables);
 
                             } else {
+                                _resetModel();
                                 resolve(outcome);
                             }
                         }
@@ -1085,16 +1122,19 @@ function indexeddbProvider($windowProvider) {
                             objectStore.onsuccess = function (event) {
                                 //adding newly/existing key path value to the object
                                 data[table.keyPathField] = event.target.result;
+                                _resetModel();
                                 resolve(data);
                             };
 
                             transaction.onerror = function (event) {
+                                _resetModel();
                                 reject(event.srcElement.error);
                             };
 
                         };
 
                         connection.onerror = function (event) {
+                            _resetModel();
                             reject(event.srcElement.error);
                         };
                     });
@@ -1139,6 +1179,7 @@ function indexeddbProvider($windowProvider) {
                             }
 
                         } else {
+                            _resetModel();
                             resolve();
                         }
                     }, true);
@@ -1186,16 +1227,19 @@ function indexeddbProvider($windowProvider) {
                                 if (model.hasWith) {
                                     _deleteWith(resolve, reject, value, relations);
                                 } else {
+                                    _resetModel();
                                     resolve();
                                 }
                             };
 
                             transaction.onerror = function (err) {
+                                _resetModel();
                                 reject(err.srcElement.error);
                             };
                         };
 
                         connection.onerror = function (err) {
+                            _resetModel();
                             reject(err.srcElement.error);
                         };
                     });
@@ -1238,6 +1282,7 @@ function indexeddbProvider($windowProvider) {
                             if (model.hasWith) {
                                 _deleteWith(resolve, reject, deletedIds, relations, true);
                             } else {
+                                _resetModel();
                                 resolve();
                             }
                         }
