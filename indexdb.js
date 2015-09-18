@@ -58,7 +58,7 @@ function indexeddbProvider($windowProvider) {
          * @param {integer} version [version of database]
          * @param {array} tables  [contains tables to be created]
          */
-        function CreateTables(name, version, tables) {
+        function CreateTables(name, version, tables, qRes, qRej) {
             CreateDB.apply(this, [name, version]);
             var self = this;
             self.tables = tables || [];
@@ -1329,6 +1329,15 @@ function indexeddbProvider($windowProvider) {
                 }
                 return config;
             }
+            
+            //function sets keyPathValue if not provided
+            function _getIndexValue(field) {
+                if (field.keyPathValue === undefined) {
+                    return field.name;
+                }
+
+                return field.keyPathValue;
+            }
 
 
             /**
@@ -1350,8 +1359,9 @@ function indexeddbProvider($windowProvider) {
 
                         //creating other fields/indexes
                         table.fields.other.forEach(function (field) {
+                            var indexValue = _getIndexValue(field);
                             config = _getFieldConfig(field); //fetching configuration against the index
-                            objectStore.createIndex(field.name, field.keyPathValue, config);
+                            objectStore.createIndex(field.name, indexValue, config);
                         });
                     }
 
@@ -1443,14 +1453,18 @@ function indexeddbProvider($windowProvider) {
                         self.models[table.name] = new CreateModel(table);
                     });
                 }
+                qRes(self);
 
             }).catch(function (event) {
-                throw event;
+                qRej(event);
             });
 
         }
 
-        return new CreateTables(dbName, dbVersion, dbTables);
+        return $q(function (res, rej) {
+            var a = new CreateTables(dbName, dbVersion, dbTables, res, rej);
+            return a;
+        });
     }
 
     initialize.$inject = ['$q'];
