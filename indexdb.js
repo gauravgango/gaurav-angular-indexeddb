@@ -770,7 +770,7 @@ function indexeddbProvider($windowProvider) {
                         model.withTables[tableName] = new CreateModel(tableName);
                     });
                 }
-                
+
                 //sorting where in/ where not in as number
                 function _sortAsNumbers(a, b) {
                     return (a - b);
@@ -1013,7 +1013,7 @@ function indexeddbProvider($windowProvider) {
 
                 //where in model function for setting whereInValues
                 model.whereIn = function (inValues, sortAsNumbers) {
-                    
+
                     sortAsNumbers = (sortAsNumbers === undefined) ? false : sortAsNumbers;
                     inValues = (sortAsNumbers === true) ? inValues.sort(_sortAsNumbers) : inValues.sort();
                     model.whereInValues = inValues;
@@ -1329,7 +1329,7 @@ function indexeddbProvider($windowProvider) {
                 }
                 return config;
             }
-            
+
             //function sets keyPathValue if not provided
             function _getIndexValue(field) {
                 if (field.keyPathValue === undefined) {
@@ -1444,17 +1444,15 @@ function indexeddbProvider($windowProvider) {
             _setTables();
 
             self.open.then(function (event) {
-                //when database is being upgraded
                 if (event.type === "upgradeneeded") {
                     _createTables(event.target.result);
-
                 } else {
                     self.tables.forEach(function (table) {
                         self.models[table.name] = new CreateModel(table);
                     });
                 }
-                qRes(self);
 
+                qRes(self);
             }).catch(function (event) {
                 qRej(event);
             });
