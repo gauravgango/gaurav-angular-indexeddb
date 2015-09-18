@@ -770,6 +770,11 @@ function indexeddbProvider($windowProvider) {
                         model.withTables[tableName] = new CreateModel(tableName);
                     });
                 }
+                
+                //sorting where in/ where not in as number
+                function _sortAsNumbers(a, b) {
+                    return (a - b);
+                }
 
                 //selecting index to make searches upon
                 model.select = function (index) {
@@ -1007,8 +1012,10 @@ function indexeddbProvider($windowProvider) {
                 };
 
                 //where in model function for setting whereInValues
-                model.whereIn = function (inValues) {
-                    inValues = inValues.sort();
+                model.whereIn = function (inValues, sortAsNumbers) {
+                    
+                    sortAsNumbers = (sortAsNumbers === undefined) ? false : sortAsNumbers;
+                    inValues = (sortAsNumbers === true) ? inValues.sort(_sortAsNumbers) : inValues.sort();
                     model.whereInValues = inValues;
 
                     return model;
@@ -1089,9 +1096,10 @@ function indexeddbProvider($windowProvider) {
                 };
 
                 //function sets where not in values for model
-                model.whereNotIn = function (notInValues) {
+                model.whereNotIn = function (notInValues, sortAsNumbers) {
 
-                    notInValues = notInValues.sort();
+                    sortAsNumbers = (sortAsNumbers === undefined) ? false : sortAsNumbers;
+                    notInValues = (sortAsNumbers === true) ? notInValues.sort(_sortAsNumbers) : notInValues.sort();
                     model.whereNotInValues = notInValues;
 
                     return model;
