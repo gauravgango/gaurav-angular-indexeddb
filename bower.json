@@ -13,7 +13,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "angular": ">=1.4.x"
+    "angular": ">=1.2.x"
   },
   "ignore": [
     "**/.*",

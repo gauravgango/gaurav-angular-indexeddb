@@ -3,7 +3,7 @@
 > An indexedDB wrapper for Angular JS.
 
 [![Bower](https://img.shields.io/bower/v/angularjs-indexeddb.svg)]()
-[![Angular JS compatibility](https://img.shields.io/badge/angular-1.4.x-green.svg)]()
+[![Angular JS compatibility](https://img.shields.io/badge/angular->=1.2.x-green.svg)]()
 
 ### Installation via [Bower](http://bower.io)
 
