@@ -2,3 +2,4 @@
 .gitattributes
 .jshintrc
 gulpfile.js
+bower.json
