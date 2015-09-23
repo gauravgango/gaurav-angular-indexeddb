@@ -1,6 +1,6 @@
 {
-  "name": "angular-indexeddb",
-  "description": "IndexedDB wrapper for angular js",
+  "name": "gaurav-angular-indexeddb",
+  "description": "IndexedDB wrapper for Angular JS",
   "version": "0.0.1",
   "license": "MIT",
   "keywords": [
@@ -36,6 +36,7 @@
     }
   ],
   "dependencies": {
+    "gulp-header": "^1.7.1"
   },
   "devDependencies": {
     "del": "^2.0.2",
@@ -47,6 +48,5 @@
     "gulp-util": "~3.0.6",
     "jshint-stylish": "^2.0.1"
   },
-  "optionalDependencies": {
-  }
+  "optionalDependencies": {}
 }
