@@ -36,11 +36,12 @@
     }
   ],
   "dependencies": {
-    "gulp-header": "^1.7.1"
+
   },
   "devDependencies": {
     "del": "^2.0.2",
     "gulp": "~3.9.0",
+    "gulp-header": "^1.7.1",
     "gulp-jshint": "^1.11.2",
     "gulp-rename": "^1.2.2",
     "gulp-sourcemaps": "^1.5.1",
