@@ -6,10 +6,7 @@
     "gauravgango"
   ],
   "description": "IndexedDB wrapper for angular js",
-  "main": "dist/angular-indexeddb.min.js",
-  "moduleType": [
-    "amd"
-  ],
+  "main": "src/angular-indexeddb.js",
   "keywords": [
     "indexeddb",
     "angular"
@@ -20,9 +17,12 @@
   },
   "ignore": [
     "**/.*",
+    "!README.md",
     "node_modules",
     "bower_components",
     "test",
-    "tests"
+    "tests",
+    "demo",
+    "example"
   ]
 }
