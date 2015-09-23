@@ -1,3 +1,23 @@
-index.html
-app.js
-angular.min.js
+# https://github.com/github/gitignore
+# https://www.gitignore.io/
+
+# phpstorm, webstorm
+.idea
+
+# logs
+logs/
+*.log
+npm-debug.log
+
+# bower packages
+bower_components/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# node packages
+# https://docs.npmjs.com/misc/faq#should-i-check-my-node-modules-folder-into-git
+node_modules/
+
+
