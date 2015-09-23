@@ -1,0 +1,52 @@
+{
+  "name": "angular-indexeddb",
+  "description": "IndexedDB wrapper for angular js",
+  "version": "0.0.1",
+  "license": "MIT",
+  "keywords": [
+    "indexeddb",
+    "angular"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/gauravgango/gaurav-angular-indexeddb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gauravgango/gaurav-angular-indexeddb/issues"
+  },
+  "homepage": "https://github.com/gauravgango/gaurav-angular-indexeddb",
+  "maintainers": [
+    {
+      "name": "gauravgango",
+      "web": "https://github.com/gauravgango"
+    }
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": "0.12.x",
+    "npm": "~3.3.3"
+  },
+  "author": "gauravgango",
+  "contributors": [
+    {
+      "name": "ank91",
+      "url": "https://ank91.github.io"
+    }
+  ],
+  "dependencies": {
+  },
+  "devDependencies": {
+    "del": "^2.0.2",
+    "gulp": "~3.9.0",
+    "gulp-jshint": "^1.11.2",
+    "gulp-rename": "^1.2.2",
+    "gulp-sourcemaps": "^1.5.1",
+    "gulp-uglify": "^1.1.0",
+    "gulp-util": "~3.0.6",
+    "jshint-stylish": "^2.0.1"
+  },
+  "optionalDependencies": {
+  }
+}

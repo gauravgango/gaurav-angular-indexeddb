@@ -16,7 +16,8 @@ bower_components/
 .DS_Store
 Thumbs.db
 
-# others
-index.html
-app.js
-angular.min.js
+# node packages
+# https://docs.npmjs.com/misc/faq#should-i-check-my-node-modules-folder-into-git
+node_modules/
+
+
