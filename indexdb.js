@@ -128,7 +128,7 @@ function indexeddbProvider($windowProvider) {
                             transactionTables = _getTransactionTables();
                             transaction = db.transaction(transactionTables, write);
 
-                            //if model has with relation 
+                            //if model has with relation
                             if (model.hasWith) {
                                 transactionTables.splice(0, 1);
                                 transactionTables.forEach(function (tableName) {
@@ -181,9 +181,9 @@ function indexeddbProvider($windowProvider) {
                     return value;
                 }
 
-                //private : function for where not in logic 
+                //private : function for where not in logic
                 function _whereNotIn(result, outcome, notInCaseInsensitiveArray) {
-                    //case sensitive 
+                    //case sensitive
                     if (model.caseInsensitive) {
                         var resultKey = _changeCase(result.key);
                         model.whereNotInValues.forEach(function (value) {
@@ -328,7 +328,7 @@ function indexeddbProvider($windowProvider) {
 
                     var newValue = _updateValue(result.value, data); //data to be updated
 
-                    //case sensitive 
+                    //case sensitive
                     if (model.caseInsensitive) {
                         var resultKey = _changeCase(result.key);
                         model.whereNotInValues.forEach(function (value) {
@@ -401,7 +401,7 @@ function indexeddbProvider($windowProvider) {
 
                 //private : where not in logic for deleting
                 function _wherNotInDestroy(result, notInCaseInsensitiveArray, deletedIds) {
-                    //case sensitive 
+                    //case sensitive
                     if (model.caseInsensitive) {
                         var resultKey = _changeCase(result.key);
                         model.whereNotInValues.forEach(function (value) {
@@ -469,7 +469,7 @@ function indexeddbProvider($windowProvider) {
                     //for each relational table
                     relationNames.forEach(function (withTableName) {
 
-                        //retrieving main relationship join data 
+                        //retrieving main relationship join data
                         if (isFind) {
                             _id = angular.copy(outcome[model.originalWithRelation[withTableName].field]);
 
@@ -524,7 +524,7 @@ function indexeddbProvider($windowProvider) {
 
                                     //adding those with relation records which have relation with current record
                                     currentOutcome.forEach(function (currentRecord) {
-                                        //adding the records to the main table 
+                                        //adding the records to the main table
                                         if (outcome[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
                                             outcome.Relations[withTableName].push(currentRecord);
                                         }
@@ -539,7 +539,7 @@ function indexeddbProvider($windowProvider) {
 
                                         //adding those with relation records which have relation with current record
                                         currentOutcome.forEach(function (currentRecord) {
-                                            //adding the records to the main table 
+                                            //adding the records to the main table
                                             if (record[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
                                                 record.Relations[withTableName].push(currentRecord);
                                             }
@@ -770,7 +770,7 @@ function indexeddbProvider($windowProvider) {
                         model.withTables[tableName] = new CreateModel(tableName);
                     });
                 }
-                
+
                 //sorting where in/ where not in as number
                 function _sortAsNumbers(a, b) {
                     return (a - b);
@@ -1013,7 +1013,7 @@ function indexeddbProvider($windowProvider) {
 
                 //where in model function for setting whereInValues
                 model.whereIn = function (inValues, sortAsNumbers) {
-                    
+
                     sortAsNumbers = (sortAsNumbers === undefined) ? false : sortAsNumbers;
                     inValues = (sortAsNumbers === true) ? inValues.sort(_sortAsNumbers) : inValues.sort();
                     model.whereInValues = inValues;
@@ -1042,7 +1042,7 @@ function indexeddbProvider($windowProvider) {
                     return model;
                 };
 
-                //function sets less than value for index 
+                //function sets less than value for index
                 model.lt = function (upper) {
                     upper = _changeCase(upper);
                     model.bound = self.keyRange.upperBound(upper, true);
@@ -1329,7 +1329,7 @@ function indexeddbProvider($windowProvider) {
                 }
                 return config;
             }
-            
+
             //function sets keyPathValue if not provided
             function _getIndexValue(field) {
                 if (field.keyPathValue === undefined) {
