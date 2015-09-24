@@ -116,52 +116,62 @@ function indexeddbProvider($windowProvider) {
                     var relations = {};
 
                     return $q(function (resolve, reject) {
-                        connection = self.indexdb.open(self.name);
-                        connection.onsuccess = function (event) {
+                        try {
+                            connection = self.indexdb.open(self.name);
+                            connection.onsuccess = function (event) {
 
-                            var db = event.target.result;
-                            //opening transaction
-                            transactionTables = _getTransactionTables();
-                            transaction = db.transaction(transactionTables, write);
+                                var db = event.target.result;
+                                //opening transaction
+                                transactionTables = _getTransactionTables();
+                                transaction = db.transaction(transactionTables, write);
 
-                            //if model has with relation
-                            if (model.hasWith) {
-                                transactionTables.splice(0, 1);
-                                transactionTables.forEach(function (tableName) {
-                                    relations[tableName] = transaction.objectStore(tableName);
-                                });
+                                //if model has with relation
+                                if (model.hasWith) {
+                                    transactionTables.splice(0, 1);
+                                    transactionTables.forEach(function (tableName) {
+                                        relations[tableName] = transaction.objectStore(tableName);
+                                    });
 
-                            }
+                                }
 
-                            objectStore = transaction.objectStore(table.name);
+                                objectStore = transaction.objectStore(table.name);
 
-                            //if index is defined then adding index to object store
-                            if (model.index !== null) {
-                                objectStore = objectStore.index(model.index);
-                            }
+                                //if index is defined then adding index to object store
+                                if (model.index !== null) {
+                                    objectStore = objectStore.index(model.index);
+                                }
 
-                            objectStore = objectStore.openCursor(model.bound, model.traverse);
+                                objectStore = objectStore.openCursor(model.bound, model.traverse);
 
-                            //on success giving callback with promise and relation data
-                            objectStore.onsuccess = function (event) {
-                                callback(event, resolve, reject, relations);
+                                //on success giving callback with promise and relation data
+                                objectStore.onsuccess = function (event) {
+                                    try {
+                                        callback(event, resolve, reject, relations);
+
+                                    } catch (exception) {
+                                        reject(exception);
+                                    }
+                                };
+
+                                objectStore.onerror = function (event) {
+                                    _resetModel();
+                                    reject(event.srcElement.error);
+                                };
+
+                                transaction.onerror = function (err) {
+                                    _resetModel();
+                                    reject(err.srcElement.error);
+                                };
                             };
 
-                            objectStore.onerror = function (event) {
-                                _resetModel();
-                                reject(event.srcElement.error);
-                            };
-
-                            transaction.onerror = function (err) {
+                            connection.onerror = function (err) {
                                 _resetModel();
                                 reject(err.srcElement.error);
                             };
-                        };
 
-                        connection.onerror = function (err) {
-                            _resetModel();
-                            reject(err.srcElement.error);
-                        };
+                        } catch (exception) {
+                            reject(exception);
+                        }
                     });
                 }
 
@@ -600,63 +610,68 @@ function indexeddbProvider($windowProvider) {
                         }
                         //opening relational table and fetching data
                         objectStoreTables[withTableName].openCursor(self.keyRange.bound(_id[0], _id[(_id.length - 1)])).onsuccess = function (event) {
-                            var cursor = event.target.result;
-                            if (cursor) {
+                            try {
 
-                                //if relation has filter
-                                if (hasFilter) {
+                                var cursor = event.target.result;
+                                if (cursor) {
 
-                                    if (model.originalWithRelation[withTableName].filter(cursor.value) !== true) {
-                                        count = count + 1;
-                                        cursor.continue(_id[count]);
-                                        return;
-                                    }
-                                }
+                                    //if relation has filter
+                                    if (hasFilter) {
 
-                                count = _whereIn(cursor, currentOutcome, count, _id, false);
-
-                            } else {
-                                //when traversing is done
-
-                                if (isFind) {
-                                    //setting relation object to main outcome
-                                    outcome.Relations = outcome.Relations || {};
-                                    outcome.Relations[withTableName] = [];
-
-                                    //adding those with relation records which have relation with current record
-                                    currentOutcome.forEach(function (currentRecord) {
-                                        //adding the records to the main table
-                                        if (outcome[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
-                                            outcome.Relations[withTableName].push(currentRecord);
+                                        if (model.originalWithRelation[withTableName].filter(cursor.value) !== true) {
+                                            count = count + 1;
+                                            cursor.continue(_id[count]);
+                                            return;
                                         }
-                                    });
+                                    }
 
+                                    count = _whereIn(cursor, currentOutcome, count, _id, false);
 
                                 } else {
-                                    outcome.forEach(function (record) {
+                                    //when traversing is done
+
+                                    if (isFind) {
                                         //setting relation object to main outcome
-                                        record.Relations = record.Relations || {};
-                                        record.Relations[withTableName] = [];
+                                        outcome.Relations = outcome.Relations || {};
+                                        outcome.Relations[withTableName] = [];
 
                                         //adding those with relation records which have relation with current record
                                         currentOutcome.forEach(function (currentRecord) {
                                             //adding the records to the main table
-                                            if (record[model.originalWithRelation[withTableName].field] !== undefined) {
-                                                if (record[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
-                                                    record.Relations[withTableName].push(currentRecord);
-                                                }
+                                            if (outcome[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
+                                                outcome.Relations[withTableName].push(currentRecord);
                                             }
                                         });
-                                    });
-                                }
 
-                                currentCount = currentCount + 1;
 
-                                //when all of the relation tables have completed traversing then resolving
-                                if (currentCount === withTablesCount) {
-                                    _resetModel();
-                                    resolve(outcome);
+                                    } else {
+                                        outcome.forEach(function (record) {
+                                            //setting relation object to main outcome
+                                            record.Relations = record.Relations || {};
+                                            record.Relations[withTableName] = [];
+
+                                            //adding those with relation records which have relation with current record
+                                            currentOutcome.forEach(function (currentRecord) {
+                                                //adding the records to the main table
+                                                if (record[model.originalWithRelation[withTableName].field] !== undefined) {
+                                                    if (record[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
+                                                        record.Relations[withTableName].push(currentRecord);
+                                                    }
+                                                }
+                                            });
+                                        });
+                                    }
+
+                                    currentCount = currentCount + 1;
+
+                                    //when all of the relation tables have completed traversing then resolving
+                                    if (currentCount === withTablesCount) {
+                                        _resetModel();
+                                        resolve(outcome);
+                                    }
                                 }
+                            } catch (exception) {
+                                reject(exception);
                             }
                         };
 
@@ -805,47 +820,52 @@ function indexeddbProvider($windowProvider) {
 
                     relationNames.forEach(function (withTableName) {
                         objectStoreTables[withTableName].index(model.originalWithRelation[withTableName].field).openCursor(bound).onsuccess = function (event) {
-                            var cursor = event.target.result;
-                            if (cursor) {
-                                var newValue = _updateValue(cursor.value, {}, true);
-                                if (newValue[model.originalWithRelation[withTableName].field] === undefined) {
-                                    cursor.continue();
-                                    return;
-                                }
-
-                                var index;
-                                if (isDestroy) {
-                                    value.forEach(function (_id) {
-                                        index = newValue[model.originalWithRelation[withTableName].field].indexOf(_id);
-
-                                        if (index !== -1) {
-                                            newValue[model.originalWithRelation[withTableName].field].splice(index, 1);
-                                        }
-                                    });
-                                } else {
-                                    index = newValue[model.originalWithRelation[withTableName].field].indexOf(value);
-
-                                    if (index === -1) {
+                            try {
+                                var cursor = event.target.result;
+                                if (cursor) {
+                                    var newValue = _updateValue(cursor.value, {}, true);
+                                    if (newValue[model.originalWithRelation[withTableName].field] === undefined) {
                                         cursor.continue();
                                         return;
                                     }
 
-                                    newValue[model.originalWithRelation[withTableName].field].splice(index, 1);
+                                    var index;
+                                    if (isDestroy) {
+                                        value.forEach(function (_id) {
+                                            index = newValue[model.originalWithRelation[withTableName].field].indexOf(_id);
+
+                                            if (index !== -1) {
+                                                newValue[model.originalWithRelation[withTableName].field].splice(index, 1);
+                                            }
+                                        });
+                                    } else {
+                                        index = newValue[model.originalWithRelation[withTableName].field].indexOf(value);
+
+                                        if (index === -1) {
+                                            cursor.continue();
+                                            return;
+                                        }
+
+                                        newValue[model.originalWithRelation[withTableName].field].splice(index, 1);
+                                    }
+
+
+                                    cursor.update(newValue);
+                                    cursor.continue();
+
+                                } else {
+
+                                    currentCount = currentCount + 1;
+
+                                    if (currentCount === withTablesCount) {
+                                        _resetModel();
+                                        resolve();
+                                    }
                                 }
-
-
-                                cursor.update(newValue);
-                                cursor.continue();
-
-                            } else {
-
-                                currentCount = currentCount + 1;
-
-                                if (currentCount === withTablesCount) {
-                                    _resetModel();
-                                    resolve();
-                                }
+                            } catch (exception) {
+                                reject(exception);
                             }
+
                         };
 
                         objectStoreTables[withTableName].onerror = function (error) {
@@ -1001,49 +1021,68 @@ function indexeddbProvider($windowProvider) {
                     var getId = $q(function (resolve, reject) {
                         var transactionTables = [];
                         var relations = {};
+                        try {
 
-                        connection = self.indexdb.open(self.name);
-                        connection.onsuccess = function (event) {
-                            var db = event.target.result;
+                            connection = self.indexdb.open(self.name);
+                            connection.onsuccess = function (event) {
+                                try {
+                                    var db = event.target.result;
 
-                            transactionTables = _getTransactionTables();
-                            transaction = db.transaction(transactionTables);
+                                    transactionTables = _getTransactionTables();
+                                    transaction = db.transaction(transactionTables);
 
-                            if (model.hasWith) {
-                                transactionTables.splice(0, 1);
-                                transactionTables.forEach(function (withTableName) {
-                                    relations[withTableName] = transaction.objectStore(withTableName);
-                                });
-                            }
+                                    if (model.hasWith) {
+                                        transactionTables.splice(0, 1);
+                                        transactionTables.forEach(function (withTableName) {
+                                            relations[withTableName] = transaction.objectStore(withTableName);
+                                        });
+                                    }
 
-                            objectStore = transaction.objectStore(table.name);
+                                    objectStore = transaction.objectStore(table.name);
 
-                            //if index is set then searching on the index
-                            if (model.index !== null) {
-                                objectStore = objectStore.index(model.index);
-                            }
-                            objectStore.get(model.bound).onsuccess = function (record) {
+                                    //if index is set then searching on the index
+                                    if (model.index !== null) {
+                                        objectStore = objectStore.index(model.index);
+                                    }
 
-                                if (model.hasWith) {
-                                    _getWithAllData(resolve, reject, record.target.result, relations, true);
+                                    objectStore = objectStore.get(model.bound);
+                                    objectStore.onsuccess = function (record) {
+                                        try {
 
-                                } else {
-                                    _resetModel();
-                                    resolve(record.target.result);
+                                            if (model.hasWith) {
+                                                _getWithAllData(resolve, reject, record.target.result, relations, true);
+
+                                            } else {
+                                                _resetModel();
+                                                resolve(record.target.result);
+                                            }
+                                        } catch (exception) {
+                                            reject(exception);
+                                        }
+                                    };
+
+                                    objectStore.onerror = function (error) {
+                                        reject(error);
+                                    };
+
+                                    transaction.onerror = function (err) {
+                                        _resetModel();
+                                        reject(err.srcElement.error);
+                                    };
+
+                                } catch (exception) {
+                                    reject(exception);
                                 }
                             };
 
-
-                            transaction.onerror = function (err) {
+                            connection.onerror = function (err) {
                                 _resetModel();
                                 reject(err.srcElement.error);
                             };
-                        };
+                        } catch (exception) {
+                            reject(exception);
+                        }
 
-                        connection.onerror = function (err) {
-                            _resetModel();
-                            reject(err.srcElement.error);
-                        };
                     });
 
                     return getId;
@@ -1053,58 +1092,73 @@ function indexeddbProvider($windowProvider) {
                 model.add = function (data) {
 
                     var add = $q(function (resolve, reject) {
-                        var transactionTables = [];
-                        var relations = {};
+                        try {
 
-                        connection = self.indexdb.open(self.name);
-                        connection.onsuccess = function (event) {
+                            var transactionTables = [];
+                            var relations = {};
 
-                            var db = event.target.result;
+                            connection = self.indexdb.open(self.name);
+                            connection.onsuccess = function (event) {
+                                try {
+                                    var db = event.target.result;
 
-                            transactionTables = _getTransactionTables();
-                            transaction = db.transaction(transactionTables, "readwrite");
+                                    transactionTables = _getTransactionTables();
+                                    transaction = db.transaction(transactionTables, "readwrite");
 
-                            if (model.hasWith) {
-                                transactionTables.splice(0, 1);
-                                transactionTables.forEach(function (withTableName) {
-                                    relations[withTableName] = transaction.objectStore(withTableName);
-                                });
-                            }
+                                    if (model.hasWith) {
+                                        transactionTables.splice(0, 1);
+                                        transactionTables.forEach(function (withTableName) {
+                                            relations[withTableName] = transaction.objectStore(withTableName);
+                                        });
+                                    }
 
-                            objectStore = transaction.objectStore(table.name);
-                            if (table.hasTimeStamp) {
-                                data.updatedAt = Date.parse(Date());
-                                data.createdAt = Date.parse(Date());
-                            }
-                            objectStore = objectStore.add(data);
+                                    objectStore = transaction.objectStore(table.name);
+                                    if (table.hasTimeStamp) {
+                                        data.updatedAt = Date.parse(Date());
+                                        data.createdAt = Date.parse(Date());
+                                    }
+                                    objectStore = objectStore.add(data);
 
-                            objectStore.onsuccess = function (event) {
-                                var result;
-                                result = data;
+                                    objectStore.onsuccess = function (event) {
+                                        try {
+                                            var result;
+                                            result = data;
 
-                                //adding key path value to the data object after adding
-                                result[table.fields.keyPathField] = event.target.result;
+                                            //adding key path value to the data object after adding
+                                            result[table.fields.keyPathField] = event.target.result;
 
-                                if (model.hasWith) {
-                                    _addWithData(resolve, reject, result, relations, transaction);
-                                } else {
-                                    _resetModel();
-                                    resolve(result);
+                                            if (model.hasWith) {
+                                                _addWithData(resolve, reject, result, relations, transaction);
+                                            } else {
+                                                _resetModel();
+                                                resolve(result);
 
+                                            }
+
+                                        } catch (exception) {
+                                            reject(exception);
+                                        }
+
+                                    };
+
+                                    transaction.onerror = function (event) {
+                                        _resetModel();
+                                        reject(event.srcElement.error);
+                                    };
+                                } catch (exception) {
+                                    reject(exception);
                                 }
+
+
                             };
 
-                            transaction.onerror = function (event) {
+                            connection.onerror = function (event) {
                                 _resetModel();
                                 reject(event.srcElement.error);
                             };
-
-                        };
-
-                        connection.onerror = function (event) {
-                            _resetModel();
-                            reject(event.srcElement.error);
-                        };
+                        } catch (exception) {
+                            reject(exception);
+                        }
                     });
 
                     return add;
@@ -1117,53 +1171,76 @@ function indexeddbProvider($windowProvider) {
                     var inserted = 0; //no of records inserted
 
                     var add = $q(function (resolve, reject) {
+                        try {
+                            connection = self.indexdb.open(self.name);
+                            connection.onsuccess = function (event) {
+                                try {
 
-                        connection = self.indexdb.open(self.name);
-                        connection.onsuccess = function (event) {
+                                    var db = event.target.result;
+                                    transaction = db.transaction([table.name], "readwrite");
 
-                            var db = event.target.result;
-                            transaction = db.transaction([table.name], "readwrite");
-                            objectStore = transaction.objectStore(table.name);
+                                    try {
 
-                            //for each record
-                            data.forEach(function (toAddData) {
+                                        objectStore = transaction.objectStore(table.name);
+                                        //for each record
+                                        data.forEach(function (toAddData) {
 
-                                //adding time stamps if allowed
-                                if (table.hasTimeStamp) {
-                                    toAddData.updatedAt = Date.parse(Date());
-                                    toAddData.createdAt = Date.parse(Date());
+                                            //adding time stamps if allowed
+                                            if (table.hasTimeStamp) {
+                                                toAddData.updatedAt = Date.parse(Date());
+                                                toAddData.createdAt = Date.parse(Date());
+                                            }
+
+                                            //single add instance
+                                            objectStore.add(toAddData).onsuccess = function (event) {
+                                                try {
+                                                    var result;
+                                                    result = data[inserted];
+
+                                                    //adding newly inserted key path value to the object
+                                                    result[table.fields.keyPathField] = event.target.result;
+
+                                                    outcome.push(result);
+                                                    inserted = inserted + 1;
+
+                                                    //if inserted count is equal to total no of records then resolving
+                                                    if (inserted === count) {
+                                                        _resetModel();
+                                                        resolve(outcome);
+                                                    }
+                                                } catch (exception) {
+                                                    reject(exception);
+                                                }
+
+                                            };
+                                        });
+
+                                    } catch (exception) {
+                                        _resetModel();
+                                        reject(exception);
+                                        return;
+                                    }
+
+
+                                    transaction.onerror = function (event) {
+                                        _resetModel();
+                                        reject(event.srcElement.error);
+                                    };
+                                } catch (exception) {
+                                    reject(exception);
                                 }
 
-                                //single add instance
-                                objectStore.add(toAddData).onsuccess = function (event) {
-                                    var result;
-                                    result = data[inserted];
+                            };
 
-                                    //adding newly inserted key path value to the object
-                                    result[table.fields.keyPathField] = event.target.result;
-
-                                    outcome.push(result);
-                                    inserted = inserted + 1;
-
-                                    //if inserted count is equal to total no of records then resolving
-                                    if (inserted === count) {
-                                        _resetModel();
-                                        resolve(outcome);
-                                    }
-                                };
-                            });
-
-                            transaction.onerror = function (event) {
+                            connection.onerror = function (event) {
                                 _resetModel();
                                 reject(event.srcElement.error);
                             };
 
-                        };
+                        } catch (exception) {
+                            reject(exception);
+                        }
 
-                        connection.onerror = function (event) {
-                            _resetModel();
-                            reject(event.srcElement.error);
-                        };
                     });
 
                     return add;
@@ -1279,43 +1356,57 @@ function indexeddbProvider($windowProvider) {
                 //wrapper function firing default put on the indexed db
                 model.put = function (data) {
                     var put = $q(function (resolve, reject) {
+                        try {
 
-                        connection = self.indexdb.open(self.name);
-                        connection.onsuccess = function (event) {
+                            connection = self.indexdb.open(self.name);
+                            connection.onsuccess = function (event) {
 
-                            var db = event.target.result;
-                            transaction = db.transaction([table.name], "readwrite");
-                            objectStore = transaction.objectStore(table.name);
+                                var db = event.target.result;
+                                transaction = db.transaction([table.name], "readwrite");
+                                objectStore = transaction.objectStore(table.name);
 
-                            if (table.hasTimeStamp) {
-                                data.updatedAt = Date.parse(Date());
+                                if (table.hasTimeStamp) {
+                                    data.updatedAt = Date.parse(Date());
 
-                                if (data.createdAt === undefined) {
-                                    data.createdAt = Date.parse(Date());
+                                    if (data.createdAt === undefined) {
+                                        data.createdAt = Date.parse(Date());
+                                    }
                                 }
-                            }
 
-                            //firing put method
-                            objectStore = objectStore.put(data);
+                                //firing put method
+                                objectStore = objectStore.put(data);
 
-                            objectStore.onsuccess = function (event) {
-                                //adding newly/existing key path value to the object
-                                data[table.keyPathField] = event.target.result;
-                                _resetModel();
-                                resolve(data);
+                                objectStore.onsuccess = function (event) {
+                                    try {
+                                        //adding newly/existing key path value to the object
+                                        data[table.keyPathField] = event.target.result;
+                                        _resetModel();
+                                        resolve(data);
+
+                                    } catch (exception) {
+                                        reject(exception);
+                                    }
+                                };
+
+                                objectStore.onerror = function (error) {
+                                    reject(error);
+                                };
+
+                                transaction.onerror = function (error) {
+                                    _resetModel();
+                                    reject(error);
+                                };
+
                             };
 
-                            transaction.onerror = function (event) {
+                            connection.onerror = function (event) {
                                 _resetModel();
                                 reject(event.srcElement.error);
                             };
+                        } catch (exception) {
+                            reject(exception);
+                        }
 
-                        };
-
-                        connection.onerror = function (event) {
-                            _resetModel();
-                            reject(event.srcElement.error);
-                        };
                     });
 
                     return put;
@@ -1387,46 +1478,59 @@ function indexeddbProvider($windowProvider) {
                     }
 
                     var deleteId = $q(function (resolve, reject) {
-                        connection = self.indexdb.open(self.name);
-                        connection.onsuccess = function (event) {
+                        try {
 
-                            var db = event.target.result;
-                            var relations = {};
+                            connection = self.indexdb.open(self.name);
+                            connection.onsuccess = function (event) {
 
-                            var transactionTables = _getTransactionTables();
-                            transaction = db.transaction(transactionTables, 'readwrite');
+                                var db = event.target.result;
+                                var relations = {};
 
-                            if (model.hasWith) {
-                                transactionTables.splice(0, 1);
-                                transactionTables.forEach(function (withTableName) {
-                                    relations[withTableName] = transaction.objectStore(withTableName);
-                                });
-                            }
-
-                            objectStore = transaction.objectStore(table.name);
-
-                            objectStore = objectStore.delete(value); //firing default delete
-
-                            objectStore.onsuccess = function () {
+                                var transactionTables = _getTransactionTables();
+                                transaction = db.transaction(transactionTables, 'readwrite');
 
                                 if (model.hasWith) {
-                                    _deleteWith(resolve, reject, value, relations);
-                                } else {
-                                    _resetModel();
-                                    resolve();
+                                    transactionTables.splice(0, 1);
+                                    transactionTables.forEach(function (withTableName) {
+                                        relations[withTableName] = transaction.objectStore(withTableName);
+                                    });
                                 }
+
+                                objectStore = transaction.objectStore(table.name);
+
+                                objectStore = objectStore.delete(value); //firing default delete
+
+                                objectStore.onsuccess = function () {
+                                    try {
+                                        if (model.hasWith) {
+                                            _deleteWith(resolve, reject, value, relations);
+                                        } else {
+                                            _resetModel();
+                                            resolve();
+                                        }
+                                    } catch (exception) {
+                                        reject(exception);
+                                    }
+
+                                };
+
+                                objectStore.onerror = function (error) {
+                                    reject(error);
+                                };
+
+                                transaction.onerror = function (error) {
+                                    _resetModel();
+                                    reject(error);
+                                };
                             };
 
-                            transaction.onerror = function (err) {
+                            connection.onerror = function (err) {
                                 _resetModel();
                                 reject(err.srcElement.error);
                             };
-                        };
-
-                        connection.onerror = function (err) {
-                            _resetModel();
-                            reject(err.srcElement.error);
-                        };
+                        } catch (exception) {
+                            reject(exception);
+                        }
                     });
 
                     return deleteId;
