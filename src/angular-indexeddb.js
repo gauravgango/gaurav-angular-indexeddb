@@ -70,16 +70,6 @@ function indexeddbProvider($windowProvider) {
                 var transaction;
                 var objectStore;
 
-                model.bound = null; //default bound value
-                model.index = null; //default index value
-                model.caseInsensitive = false; //default caseInsensitive value
-                model.hasFilter = false; //default if model has filter
-                model.filterFunction = null; //default filter function
-                model.whereInValues = null; //default whereInValues for whereIn
-                model.whereNotInValues = null; //default whereNotInValues for whereNotIn
-                model.withTables = {}; //with tables structure
-                model.hasWith = false; //default has with relation status
-
                 function _resetModel() {
                     model.bound = null; //default bound value
                     model.index = null; //default index value
@@ -90,7 +80,12 @@ function indexeddbProvider($windowProvider) {
                     model.whereNotInValues = null; //default whereNotInValues for whereNotIn
                     model.withTables = {}; //with tables structure
                     model.hasWith = false; //default has with relation status
+                    model.isDesc = false;
+                    model.traverse = 'next';
+                    model.isWhereNumber = false;
                 }
+
+                _resetModel();
 
                 //private : function returns array of table names to perform transaction on
                 function _getTransactionTables() {
@@ -144,7 +139,7 @@ function indexeddbProvider($windowProvider) {
                                 objectStore = objectStore.index(model.index);
                             }
 
-                            objectStore = objectStore.openCursor(model.bound);
+                            objectStore = objectStore.openCursor(model.bound, model.traverse);
 
                             //on success giving callback with promise and relation data
                             objectStore.onsuccess = function (event) {
@@ -203,7 +198,7 @@ function indexeddbProvider($windowProvider) {
                         }
                     }
 
-                    result.continue();
+                    result.continue(null, model.traverse);
                 }
 
                 /**
@@ -236,23 +231,35 @@ function indexeddbProvider($windowProvider) {
                     }
 
                     //case for case sensitive
-                    //if key greater than current value
-                    if (result.key > whereInValues[count]) {
-                        count = count + 1;
-                        result.continue();
-                        return count;
+                    //case when where is is desc
+                    if (model.isDesc) {
+                        //if key less than current value
+                        if (result.key < whereInValues[count]) {
+                            count = count + 1;
+                            result.continue();
+                            return count;
+                        }
+                    } else {
+                        //case for ascending
+                        //if key greater than current value
+                        if (result.key > whereInValues[count]) {
+                            count = count + 1;
+                            result.continue();
+                            return count;
+                        }
                     }
 
                     //if key not equal to current value then jumping to next
                     if (result.key !== whereInValues[count]) {
-                        result.continue(whereInValues[count]);
+                        result.continue(whereInValues[count], model.traverse);
                         return count;
                     }
+
 
                     //pushing to outcome array
                     outcome.push(result.value);
                     count = count + 1;
-                    result.continue(whereInValues[count]);
+                    result.continue(whereInValues[count], model.traverse);
                     return count;
                 }
 
@@ -303,11 +310,22 @@ function indexeddbProvider($windowProvider) {
                         return 0;
                     }
                     //case for case sensitive
-                    //if key greater than current value
-                    if (result.key > model.whereInValues[count]) {
-                        result.continue();
-                        count = count + 1;
-                        return count;
+                    //case when where is is desc
+                    if (model.isDesc) {
+                        //if key less than current value
+                        if (result.key < model.whereInValues[count]) {
+                            count = count + 1;
+                            result.continue();
+                            return count;
+                        }
+                    } else {
+                        //case for ascending
+                        //if key greater than current value
+                        if (result.key > model.whereInValues[count]) {
+                            count = count + 1;
+                            result.continue();
+                            return count;
+                        }
                     }
 
                     //if key not equal to current value then jumping to next
@@ -377,11 +395,22 @@ function indexeddbProvider($windowProvider) {
                     }
 
                     //case for case sensitive
-                    //if key greater than current value
-                    if (result.key > model.whereInValues[count]) {
-                        result.continue();
-                        count = count + 1;
-                        return count;
+                    //case when where is is desc
+                    if (model.isDesc) {
+                        //if key less than current value
+                        if (result.key < model.whereInValues[count]) {
+                            count = count + 1;
+                            result.continue();
+                            return count;
+                        }
+                    } else {
+                        //case for ascending
+                        //if key greater than current value
+                        if (result.key > model.whereInValues[count]) {
+                            count = count + 1;
+                            result.continue();
+                            return count;
+                        }
                     }
 
                     //if key not equal to current value then jumping to next
@@ -457,7 +486,9 @@ function indexeddbProvider($windowProvider) {
                             return;
                         }
                     }
-                    var _id, withTablesCount, relationNames;
+                    var _id, withTablesCount, relationNames, Relations;
+
+                    Relations = {};
 
                     relationNames = Object.keys(objectStoreTables); //getting relational table names
                     withTablesCount = relationNames.length;
@@ -484,6 +515,7 @@ function indexeddbProvider($windowProvider) {
                                     });
                                 }
                             });
+                            Relations[withTableName] = [];
                         }
 
                         var count = 0;
@@ -497,6 +529,18 @@ function indexeddbProvider($windowProvider) {
 
                         _id = _id.sort();
 
+                        if (_id.length === 0) {
+
+                            if (isFind) {
+                                outcome.Relations = Relations;
+                            } else {
+                                outcome.forEach(function (record) {
+                                    record.Relations = Relations;
+                                });
+                            }
+                            resolve(outcome);
+                            return;
+                        }
                         //opening relational table and fetching data
                         objectStoreTables[withTableName].openCursor(self.keyRange.bound(_id[0], _id[(_id.length - 1)])).onsuccess = function (event) {
                             var cursor = event.target.result;
@@ -540,8 +584,10 @@ function indexeddbProvider($windowProvider) {
                                         //adding those with relation records which have relation with current record
                                         currentOutcome.forEach(function (currentRecord) {
                                             //adding the records to the main table
-                                            if (record[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
-                                                record.Relations[withTableName].push(currentRecord);
+                                            if (record[model.originalWithRelation[withTableName].field] !== undefined) {
+                                                if (record[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
+                                                    record.Relations[withTableName].push(currentRecord);
+                                                }
                                             }
                                         });
                                     });
@@ -623,8 +669,6 @@ function indexeddbProvider($windowProvider) {
                                 //if relation does not have the index then adding it to list
                                 if (newValue[model.originalWithRelation[withTableName].field].indexOf(outcome._id) === -1) {
                                     newValue[model.originalWithRelation[withTableName].field].push(outcome._id);
-
-                                    outcome.Relations[withTableName].push(cursor.value);
 
                                     //case for many to many
                                     if (isMany) {
@@ -770,8 +814,76 @@ function indexeddbProvider($windowProvider) {
 
                 //sorting where in/ where not in as number
                 function _sortAsNumbers(a, b) {
+
+                    //if desc then returning b-a for descesding values
+                    if (model.isDesc) {
+                        return (b - a);
+                    }
+
+                    //returinng ascending values
                     return (a - b);
                 }
+
+                function _setOrderSettings() {
+                    //setting wherein, wherenot in as values of is desc for sorting
+                    if (model.isDesc) {
+                        //case for descending order
+                        //if whereInValues are defined
+                        if (model.whereInValues !== null) {
+                            if (model.isWhereNumber) {
+                                model.whereInValues = model.whereInValues.sort(_sortAsNumbers);
+                                return;
+                            }
+
+                            model.whereInValues = model.whereInValues.reverse();
+                        }
+                        //if whereNotInValues are defined
+                        if (model.whereNotInValues !== null) {
+                            if (model.isWhereNumber) {
+                                model.whereNotInValues = model.whereNotInValues.sort(_sortAsNumbers);
+                                return;
+                            }
+
+                            model.whereNotInValues = model.whereNotInValues.reverse();
+                        }
+                    } else {
+                        //case for ascending order
+                        //if whereInValues are defined
+                        if (model.whereInValues !== null) {
+                            if (model.isWhereNumber) {
+                                model.whereInValues = model.whereInValues.sort(_sortAsNumbers);
+                                return;
+                            }
+
+                            model.whereInValues = model.whereInValues.sort();
+                        }
+                        //if whereNotInValues are defined
+                        if (model.whereNotInValues !== null) {
+                            if (model.isWhereNumber) {
+                                model.whereNotInValues = model.whereNotInValues.sort(_sortAsNumbers);
+                                return;
+                            }
+
+                            model.whereNotInValues = model.whereNotInValues.sort();
+
+                        }
+                    }
+                }
+
+                model.orderDesc = function (isDesc) {
+                    if (isDesc === true) {
+                        model.isDesc = true;
+                        model.traverse = 'prev';
+                        _setOrderSettings();
+
+                    } else {
+                        model.isDesc = false;
+                        model.traverse = 'next';
+                        _setOrderSettings();
+                    }
+
+                    return model;
+                };
 
                 //selecting index to make searches upon
                 model.select = function (index) {
@@ -1011,9 +1123,12 @@ function indexeddbProvider($windowProvider) {
                 //where in model function for setting whereInValues
                 model.whereIn = function (inValues, sortAsNumbers) {
 
-                    sortAsNumbers = (sortAsNumbers === undefined) ? false : sortAsNumbers;
-                    inValues = (sortAsNumbers === true) ? inValues.sort(_sortAsNumbers) : inValues.sort();
+                    sortAsNumbers = (sortAsNumbers === true) ? true : false;
                     model.whereInValues = inValues;
+
+                    model.isWhereNumber = sortAsNumbers; //setting whereIn as number type
+
+                    _setOrderSettings(); //sorting whereInValues as order type
 
                     return model;
                 };
@@ -1065,7 +1180,7 @@ function indexeddbProvider($windowProvider) {
                                 }
                             }
 
-                            //first checking if model has whereInvalues then where not else default getAll
+                            //first checking if model has whereInValues then where not else default getAll
                             if (model.whereInValues !== null) {
                                 count = _whereIn(result, outcome, count, model.whereInValues);
 
@@ -1095,10 +1210,12 @@ function indexeddbProvider($windowProvider) {
                 //function sets where not in values for model
                 model.whereNotIn = function (notInValues, sortAsNumbers) {
 
-                    sortAsNumbers = (sortAsNumbers === undefined) ? false : sortAsNumbers;
-                    notInValues = (sortAsNumbers === true) ? notInValues.sort(_sortAsNumbers) : notInValues.sort();
+                    sortAsNumbers = (sortAsNumbers === true) ? true : false;
                     model.whereNotInValues = notInValues;
 
+                    model.isWhereNumber = sortAsNumbers; //setting whereNotInValues as number type
+
+                    _setOrderSettings(); //setting whereNotInValues as asc or desc type
                     return model;
                 };
 
