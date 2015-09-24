@@ -624,9 +624,6 @@ function indexeddbProvider($windowProvider) {
                                 if (newValue[model.originalWithRelation[withTableName].field].indexOf(outcome._id) === -1) {
                                     newValue[model.originalWithRelation[withTableName].field].push(outcome._id);
 
-                                    outcome.Relations = outcome.Relations || {};
-                                    outcome.Relations[withTableName] = outcome.Relations[withTableName] || [];
-
                                     outcome.Relations[withTableName].push(cursor.value);
 
                                     //case for many to many
