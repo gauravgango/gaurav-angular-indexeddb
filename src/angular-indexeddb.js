@@ -42,7 +42,7 @@ function indexeddbProvider($windowProvider) {
                     resolve(event);
                 };
                 connection.onerror = function (event) {
-                    reject(event.srcElement.error);
+                    reject(event);
                 };
 
                 connection.onsuccess = function (event) {
@@ -149,27 +149,29 @@ function indexeddbProvider($windowProvider) {
                                         callback(event, resolve, reject, relations);
 
                                     } catch (exception) {
+                                        _resetModel();
                                         reject(exception);
                                     }
                                 };
 
-                                objectStore.onerror = function (event) {
+                                objectStore.onerror = function (error) {
                                     _resetModel();
-                                    reject(event.srcElement.error);
+                                    reject(error);
                                 };
 
-                                transaction.onerror = function (err) {
+                                transaction.onerror = function (error) {
                                     _resetModel();
-                                    reject(err.srcElement.error);
+                                    reject(error);
                                 };
                             };
 
-                            connection.onerror = function (err) {
+                            connection.onerror = function (error) {
                                 _resetModel();
-                                reject(err.srcElement.error);
+                                reject(error);
                             };
 
                         } catch (exception) {
+                            _resetModel();
                             reject(exception);
                         }
                     });
@@ -671,6 +673,7 @@ function indexeddbProvider($windowProvider) {
                                     }
                                 }
                             } catch (exception) {
+                                _resetModel();
                                 reject(exception);
                             }
                         };
@@ -863,6 +866,7 @@ function indexeddbProvider($windowProvider) {
                                     }
                                 }
                             } catch (exception) {
+                                _resetModel();
                                 reject(exception);
                             }
 
@@ -1057,29 +1061,33 @@ function indexeddbProvider($windowProvider) {
                                                 resolve(record.target.result);
                                             }
                                         } catch (exception) {
+                                            _resetModel();
                                             reject(exception);
                                         }
                                     };
 
                                     objectStore.onerror = function (error) {
+                                        _resetModel();
                                         reject(error);
                                     };
 
-                                    transaction.onerror = function (err) {
+                                    transaction.onerror = function (error) {
                                         _resetModel();
-                                        reject(err.srcElement.error);
+                                        reject(error);
                                     };
 
                                 } catch (exception) {
+                                    _resetModel();
                                     reject(exception);
                                 }
                             };
 
-                            connection.onerror = function (err) {
+                            connection.onerror = function (error) {
                                 _resetModel();
-                                reject(err.srcElement.error);
+                                reject(error);
                             };
                         } catch (exception) {
+                            _resetModel();
                             reject(exception);
                         }
 
@@ -1136,6 +1144,7 @@ function indexeddbProvider($windowProvider) {
                                             }
 
                                         } catch (exception) {
+                                            _resetModel();
                                             reject(exception);
                                         }
 
@@ -1146,15 +1155,16 @@ function indexeddbProvider($windowProvider) {
                                         reject(event.srcElement.error);
                                     };
                                 } catch (exception) {
+                                    _resetModel();
                                     reject(exception);
                                 }
 
 
                             };
 
-                            connection.onerror = function (event) {
+                            connection.onerror = function (error) {
                                 _resetModel();
-                                reject(event.srcElement.error);
+                                reject(error);
                             };
                         } catch (exception) {
                             reject(exception);
@@ -1209,6 +1219,7 @@ function indexeddbProvider($windowProvider) {
                                                         resolve(outcome);
                                                     }
                                                 } catch (exception) {
+                                                    _resetModel();
                                                     reject(exception);
                                                 }
 
@@ -1227,6 +1238,7 @@ function indexeddbProvider($windowProvider) {
                                         reject(event.srcElement.error);
                                     };
                                 } catch (exception) {
+                                    _resetModel();
                                     reject(exception);
                                 }
 
@@ -1238,6 +1250,7 @@ function indexeddbProvider($windowProvider) {
                             };
 
                         } catch (exception) {
+                            _resetModel();
                             reject(exception);
                         }
 
@@ -1384,11 +1397,13 @@ function indexeddbProvider($windowProvider) {
                                         resolve(data);
 
                                     } catch (exception) {
+                                        _resetModel();
                                         reject(exception);
                                     }
                                 };
 
                                 objectStore.onerror = function (error) {
+                                    _resetModel();
                                     reject(error);
                                 };
 
@@ -1404,6 +1419,7 @@ function indexeddbProvider($windowProvider) {
                                 reject(event.srcElement.error);
                             };
                         } catch (exception) {
+                            _resetModel();
                             reject(exception);
                         }
 
@@ -1509,12 +1525,14 @@ function indexeddbProvider($windowProvider) {
                                             resolve();
                                         }
                                     } catch (exception) {
+                                        _resetModel();
                                         reject(exception);
                                     }
 
                                 };
 
                                 objectStore.onerror = function (error) {
+                                    _resetModel();
                                     reject(error);
                                 };
 
@@ -1524,11 +1542,12 @@ function indexeddbProvider($windowProvider) {
                                 };
                             };
 
-                            connection.onerror = function (err) {
+                            connection.onerror = function (error) {
                                 _resetModel();
-                                reject(err.srcElement.error);
+                                reject(error);
                             };
                         } catch (exception) {
+                            _resetModel();
                             reject(exception);
                         }
                     });
