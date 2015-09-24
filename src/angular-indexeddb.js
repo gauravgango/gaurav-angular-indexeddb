@@ -84,6 +84,7 @@ function indexeddbProvider($windowProvider) {
                     model.traverse = 'next'; //default travering set to ascending
                     model.isWhereNumber = false; //default where claues not containing number
                     model.originalWithRelation = null; //default original with relation data
+                    model.likeString = null; //default likeString data
                 }
 
                 _resetModel();
@@ -104,6 +105,22 @@ function indexeddbProvider($windowProvider) {
                     }
 
                     return transactionTables;
+                }
+
+                //private function checks for like functionality in record key value
+                function _checkLikeString(recordKey) {
+                    var key = angular.copy(recordKey);
+                    key = key.toString();
+
+                    //if case insensitive
+                    if (model.caseInsensitive) {
+                        key = key.toLowerCase();
+                        return (key.match(model.likeString.toLowerCase()) !== null);
+                    }
+
+                    return (key.match(model.likeString) !== null);
+
+
                 }
 
                 //private : wrapper for calling default getAll with callback for success
@@ -594,6 +611,10 @@ function indexeddbProvider($windowProvider) {
                         //if filter was set in relation then setting hasFilter flag
                         if (typeof model.originalWithRelation[withTableName].filter === 'function') {
                             hasFilter = true;
+                        }
+                        if (_id === undefined || _id.constructor !== Array) {
+                            _resetModel();
+                            resolve(outcome);
                         }
 
                         _id = _id.sort();
@@ -1327,6 +1348,14 @@ function indexeddbProvider($windowProvider) {
                                 }
                             }
 
+                            //checking for likeness in data
+                            if (model.likeString !== null) {
+                                if (_checkLikeString(result.key) === false) {
+                                    result.continue();
+                                    return;
+                                }
+                            }
+
                             //first checking if model has whereInValues then where not else default getAll
                             if (model.whereInValues !== null) {
                                 count = _whereIn(result, outcome, count, model.whereInValues);
@@ -1446,6 +1475,14 @@ function indexeddbProvider($windowProvider) {
                             //if model has filter
                             if (model.hasFilter) {
                                 if (model.filterFunction(result.value) !== true) {
+                                    result.continue();
+                                    return;
+                                }
+                            }
+
+                            //checking for likeness in data
+                            if (model.likeString !== null) {
+                                if (_checkLikeString(result.key) === false) {
                                     result.continue();
                                     return;
                                 }
@@ -1573,6 +1610,14 @@ function indexeddbProvider($windowProvider) {
                                 }
                             }
 
+                            //checking for likeness in data
+                            if (model.likeString !== null) {
+                                if (_checkLikeString(result.key) === false) {
+                                    result.continue();
+                                    return;
+                                }
+                            }
+
                             //first whereIn then whereNotIn else default destroy
                             if (model.whereInValues !== null) {
                                 count = _whereInDestroy(result, count, deletedIds);
@@ -1609,6 +1654,15 @@ function indexeddbProvider($windowProvider) {
                     model.originalWithRelation = relations; //keeping a record of original relation data
                     model.withRelation = _setWithRelation(relations); //setting objects for using with relations
 
+                    return model;
+                };
+
+                model.like = function (likeString) {
+                    if (likeString === undefined) {
+                        throw "Invalid input given to like";
+                    }
+
+                    model.likeString = likeString.toString();
                     return model;
                 };
             }
