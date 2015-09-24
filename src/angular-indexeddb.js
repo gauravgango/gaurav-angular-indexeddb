@@ -42,7 +42,7 @@ function indexeddbProvider($windowProvider) {
                     resolve(event);
                 };
                 connection.onerror = function (event) {
-                    reject(event.srcElement.error);
+                    reject(event);
                 };
 
                 connection.onsuccess = function (event) {
@@ -70,16 +70,6 @@ function indexeddbProvider($windowProvider) {
                 var transaction;
                 var objectStore;
 
-                model.bound = null; //default bound value
-                model.index = null; //default index value
-                model.caseInsensitive = false; //default caseInsensitive value
-                model.hasFilter = false; //default if model has filter
-                model.filterFunction = null; //default filter function
-                model.whereInValues = null; //default whereInValues for whereIn
-                model.whereNotInValues = null; //default whereNotInValues for whereNotIn
-                model.withTables = {}; //with tables structure
-                model.hasWith = false; //default has with relation status
-
                 function _resetModel() {
                     model.bound = null; //default bound value
                     model.index = null; //default index value
@@ -90,7 +80,14 @@ function indexeddbProvider($windowProvider) {
                     model.whereNotInValues = null; //default whereNotInValues for whereNotIn
                     model.withTables = {}; //with tables structure
                     model.hasWith = false; //default has with relation status
+                    model.isDesc = false; //default descending travers set to false
+                    model.traverse = 'next'; //default travering set to ascending
+                    model.isWhereNumber = false; //default where claues not containing number
+                    model.originalWithRelation = null; //default original with relation data
+                    model.likeString = null; //default likeString data
                 }
+
+                _resetModel();
 
                 //private : function returns array of table names to perform transaction on
                 function _getTransactionTables() {
@@ -110,6 +107,22 @@ function indexeddbProvider($windowProvider) {
                     return transactionTables;
                 }
 
+                //private function checks for like functionality in record key value
+                function _checkLikeString(recordKey) {
+                    var key = angular.copy(recordKey);
+                    key = key.toString();
+
+                    //if case insensitive
+                    if (model.caseInsensitive) {
+                        key = key.toLowerCase();
+                        return (key.match(model.likeString.toLowerCase()) !== null);
+                    }
+
+                    return (key.match(model.likeString) !== null);
+
+
+                }
+
                 //private : wrapper for calling default getAll with callback for success
                 function _get(callback, readwrite) {
 
@@ -120,52 +133,64 @@ function indexeddbProvider($windowProvider) {
                     var relations = {};
 
                     return $q(function (resolve, reject) {
-                        connection = self.indexdb.open(self.name);
-                        connection.onsuccess = function (event) {
+                        try {
+                            connection = self.indexdb.open(self.name);
+                            connection.onsuccess = function (event) {
 
-                            var db = event.target.result;
-                            //opening transaction
-                            transactionTables = _getTransactionTables();
-                            transaction = db.transaction(transactionTables, write);
+                                var db = event.target.result;
+                                //opening transaction
+                                transactionTables = _getTransactionTables();
+                                transaction = db.transaction(transactionTables, write);
 
-                            //if model has with relation
-                            if (model.hasWith) {
-                                transactionTables.splice(0, 1);
-                                transactionTables.forEach(function (tableName) {
-                                    relations[tableName] = transaction.objectStore(tableName);
-                                });
+                                //if model has with relation
+                                if (model.hasWith) {
+                                    transactionTables.splice(0, 1);
+                                    transactionTables.forEach(function (tableName) {
+                                        relations[tableName] = transaction.objectStore(tableName);
+                                    });
 
-                            }
+                                }
 
-                            objectStore = transaction.objectStore(table.name);
+                                objectStore = transaction.objectStore(table.name);
 
-                            //if index is defined then adding index to object store
-                            if (model.index !== null) {
-                                objectStore = objectStore.index(model.index);
-                            }
+                                //if index is defined then adding index to object store
+                                if (model.index !== null) {
+                                    objectStore = objectStore.index(model.index);
+                                }
 
-                            objectStore = objectStore.openCursor(model.bound);
+                                objectStore = objectStore.openCursor(model.bound, model.traverse);
 
-                            //on success giving callback with promise and relation data
-                            objectStore.onsuccess = function (event) {
-                                callback(event, resolve, reject, relations);
+                                //on success giving callback with promise and relation data
+                                objectStore.onsuccess = function (event) {
+                                    try {
+                                        callback(event, resolve, reject, relations);
+
+                                    } catch (exception) {
+                                        _resetModel();
+                                        reject(exception);
+                                    }
+                                };
+
+                                objectStore.onerror = function (error) {
+                                    _resetModel();
+                                    reject(error);
+                                };
+
+                                transaction.onerror = function (error) {
+                                    _resetModel();
+                                    reject(error);
+                                };
                             };
 
-                            objectStore.onerror = function (event) {
+                            connection.onerror = function (error) {
                                 _resetModel();
-                                reject(event.srcElement.error);
+                                reject(error);
                             };
 
-                            transaction.onerror = function (err) {
-                                _resetModel();
-                                reject(err.srcElement.error);
-                            };
-                        };
-
-                        connection.onerror = function (err) {
+                        } catch (exception) {
                             _resetModel();
-                            reject(err.srcElement.error);
-                        };
+                            reject(exception);
+                        }
                     });
                 }
 
@@ -203,7 +228,7 @@ function indexeddbProvider($windowProvider) {
                         }
                     }
 
-                    result.continue();
+                    result.continue(null, model.traverse);
                 }
 
                 /**
@@ -236,23 +261,35 @@ function indexeddbProvider($windowProvider) {
                     }
 
                     //case for case sensitive
-                    //if key greater than current value
-                    if (result.key > whereInValues[count]) {
-                        count = count + 1;
-                        result.continue();
-                        return count;
+                    //case when where is is desc
+                    if (model.isDesc) {
+                        //if key less than current value
+                        if (result.key < whereInValues[count]) {
+                            count = count + 1;
+                            result.continue();
+                            return count;
+                        }
+                    } else {
+                        //case for ascending
+                        //if key greater than current value
+                        if (result.key > whereInValues[count]) {
+                            count = count + 1;
+                            result.continue();
+                            return count;
+                        }
                     }
 
                     //if key not equal to current value then jumping to next
                     if (result.key !== whereInValues[count]) {
-                        result.continue(whereInValues[count]);
+                        result.continue(whereInValues[count], model.traverse);
                         return count;
                     }
+
 
                     //pushing to outcome array
                     outcome.push(result.value);
                     count = count + 1;
-                    result.continue(whereInValues[count]);
+                    result.continue(whereInValues[count], model.traverse);
                     return count;
                 }
 
@@ -278,10 +315,41 @@ function indexeddbProvider($windowProvider) {
                     return newValue;
                 }
 
+                //private : function updates the relations indexes by adding new values
+                function _updateWithRelation(record, data) {
+                    //retrievinging properties to be updated
+                    var properties = Object.keys(data);
+
+                    properties.forEach(function (property) {
+                        //if property in main record is undefined
+                        if (record[property] === undefined) {
+                            record[property] = [];
+                        }
+                        data[property].forEach(function (relation) {
+                            //checking if relation already exists if not then adding
+
+                            //if relation is greter than or equla to zero then adding the relation
+                            if (relation >= 0) {
+                                if (record[property].indexOf(relation) === -1) {
+                                    record[property].push(relation);
+                                }
+                            } else {
+                                //else removing relation
+                                var index = record[property].indexOf(relation * (-1));
+                                if (index !== -1) {
+                                    record[property].splice(index, 1);
+                                }
+                            }
+                        });
+                    });
+
+                    return record;
+                }
+
                 //private : where in logic for update condition. When condition passes the system updates the object in current location
                 function _whereInUpdate(result, count, data) {
                     var toUpdate = false;
-                    var newValue = _updateValue(result.value, data);
+                    var newValue;
 
                     //if case sensitive then checking throughout th database
                     if (model.caseInsensitive) {
@@ -296,6 +364,12 @@ function indexeddbProvider($windowProvider) {
 
 
                         if (toUpdate) {
+                            newValue = _updateValue(result.value, data);
+
+                            //setting with relation data to the record as well
+                            if (model.hasWith) {
+                                newValue = _updateWithRelation(newValue, model.originalWithRelation);
+                            }
                             result.update(newValue);
                         }
 
@@ -303,11 +377,22 @@ function indexeddbProvider($windowProvider) {
                         return 0;
                     }
                     //case for case sensitive
-                    //if key greater than current value
-                    if (result.key > model.whereInValues[count]) {
-                        result.continue();
-                        count = count + 1;
-                        return count;
+                    //case when where is is desc
+                    if (model.isDesc) {
+                        //if key less than current value
+                        if (result.key < model.whereInValues[count]) {
+                            count = count + 1;
+                            result.continue();
+                            return count;
+                        }
+                    } else {
+                        //case for ascending
+                        //if key greater than current value
+                        if (result.key > model.whereInValues[count]) {
+                            count = count + 1;
+                            result.continue();
+                            return count;
+                        }
                     }
 
                     //if key not equal to current value then jumping to next
@@ -315,6 +400,13 @@ function indexeddbProvider($windowProvider) {
                         result.continue(model.whereInValues[count]);
                         return count;
 
+                    }
+
+                    newValue = _updateValue(result.value, data);
+
+                    //setting with relation data to the record as well
+                    if (model.hasWith) {
+                        newValue = _updateWithRelation(newValue, model.originalWithRelation);
                     }
                     //pushing to outcome array
                     result.update(newValue);
@@ -326,7 +418,7 @@ function indexeddbProvider($windowProvider) {
                 //private : function for where not in logic for update scenario
                 function _whereNotInUpdate(result, notInCaseInsensitiveArray, data) {
 
-                    var newValue = _updateValue(result.value, data); //data to be updated
+                    var newValue;
 
                     //case sensitive
                     if (model.caseInsensitive) {
@@ -339,11 +431,23 @@ function indexeddbProvider($windowProvider) {
                         });
 
                         if (notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
+                            newValue = _updateValue(result.value, data); //data to be updated
+
+                            //setting with relation data to the record as well
+                            if (model.hasWith) {
+                                newValue = _updateWithRelation(newValue, model.originalWithRelation);
+                            }
                             result.update(newValue);
                         }
 
                     } else {
                         if (model.whereNotInValues.indexOf(result.key) === -1) {
+                            newValue = _updateValue(result.value, data); //data to be updated
+
+                            //setting with relation data to the record as well
+                            if (model.hasWith) {
+                                newValue = _updateWithRelation(newValue, model.originalWithRelation);
+                            }
                             result.update(newValue);
                         }
                     }
@@ -377,11 +481,22 @@ function indexeddbProvider($windowProvider) {
                     }
 
                     //case for case sensitive
-                    //if key greater than current value
-                    if (result.key > model.whereInValues[count]) {
-                        result.continue();
-                        count = count + 1;
-                        return count;
+                    //case when where is is desc
+                    if (model.isDesc) {
+                        //if key less than current value
+                        if (result.key < model.whereInValues[count]) {
+                            count = count + 1;
+                            result.continue();
+                            return count;
+                        }
+                    } else {
+                        //case for ascending
+                        //if key greater than current value
+                        if (result.key > model.whereInValues[count]) {
+                            count = count + 1;
+                            result.continue();
+                            return count;
+                        }
                     }
 
                     //if key not equal to current value then jumping to next
@@ -457,7 +572,9 @@ function indexeddbProvider($windowProvider) {
                             return;
                         }
                     }
-                    var _id, withTablesCount, relationNames;
+                    var _id, withTablesCount, relationNames, Relations;
+
+                    Relations = {};
 
                     relationNames = Object.keys(objectStoreTables); //getting relational table names
                     withTablesCount = relationNames.length;
@@ -484,6 +601,7 @@ function indexeddbProvider($windowProvider) {
                                     });
                                 }
                             });
+                            Relations[withTableName] = [];
                         }
 
                         var count = 0;
@@ -494,66 +612,90 @@ function indexeddbProvider($windowProvider) {
                         if (typeof model.originalWithRelation[withTableName].filter === 'function') {
                             hasFilter = true;
                         }
+                        if (_id === undefined || _id.constructor !== Array) {
+                            _resetModel();
+                            resolve(outcome);
+                        }
 
                         _id = _id.sort();
 
+                        if (_id.length === 0) {
+
+                            if (isFind) {
+                                outcome.Relations = Relations;
+                            } else {
+                                outcome.forEach(function (record) {
+                                    record.Relations = Relations;
+                                });
+                            }
+                            resolve(outcome);
+                            return;
+                        }
                         //opening relational table and fetching data
                         objectStoreTables[withTableName].openCursor(self.keyRange.bound(_id[0], _id[(_id.length - 1)])).onsuccess = function (event) {
-                            var cursor = event.target.result;
-                            if (cursor) {
+                            try {
 
-                                //if relation has filter
-                                if (hasFilter) {
+                                var cursor = event.target.result;
+                                if (cursor) {
 
-                                    if (model.originalWithRelation[withTableName].filter(cursor.value) !== true) {
-                                        count = count + 1;
-                                        cursor.continue(_id[count]);
-                                        return;
-                                    }
-                                }
+                                    //if relation has filter
+                                    if (hasFilter) {
 
-                                count = _whereIn(cursor, currentOutcome, count, _id, false);
-
-                            } else {
-                                //when traversing is done
-
-                                if (isFind) {
-                                    //setting relation object to main outcome
-                                    outcome.Relations = outcome.Relations || {};
-                                    outcome.Relations[withTableName] = [];
-
-                                    //adding those with relation records which have relation with current record
-                                    currentOutcome.forEach(function (currentRecord) {
-                                        //adding the records to the main table
-                                        if (outcome[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
-                                            outcome.Relations[withTableName].push(currentRecord);
+                                        if (model.originalWithRelation[withTableName].filter(cursor.value) !== true) {
+                                            count = count + 1;
+                                            cursor.continue(_id[count]);
+                                            return;
                                         }
-                                    });
+                                    }
 
+                                    count = _whereIn(cursor, currentOutcome, count, _id, false);
 
                                 } else {
-                                    outcome.forEach(function (record) {
+                                    //when traversing is done
+
+                                    if (isFind) {
                                         //setting relation object to main outcome
-                                        record.Relations = record.Relations || {};
-                                        record.Relations[withTableName] = [];
+                                        outcome.Relations = outcome.Relations || {};
+                                        outcome.Relations[withTableName] = [];
 
                                         //adding those with relation records which have relation with current record
                                         currentOutcome.forEach(function (currentRecord) {
                                             //adding the records to the main table
-                                            if (record[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
-                                                record.Relations[withTableName].push(currentRecord);
+                                            if (outcome[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
+                                                outcome.Relations[withTableName].push(currentRecord);
                                             }
                                         });
-                                    });
-                                }
 
-                                currentCount = currentCount + 1;
 
-                                //when all of the relation tables have completed traversing then resolving
-                                if (currentCount === withTablesCount) {
-                                    _resetModel();
-                                    resolve(outcome);
+                                    } else {
+                                        outcome.forEach(function (record) {
+                                            //setting relation object to main outcome
+                                            record.Relations = record.Relations || {};
+                                            record.Relations[withTableName] = [];
+
+                                            //adding those with relation records which have relation with current record
+                                            currentOutcome.forEach(function (currentRecord) {
+                                                //adding the records to the main table
+                                                if (record[model.originalWithRelation[withTableName].field] !== undefined) {
+                                                    if (record[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
+                                                        record.Relations[withTableName].push(currentRecord);
+                                                    }
+                                                }
+                                            });
+                                        });
+                                    }
+
+                                    currentCount = currentCount + 1;
+
+                                    //when all of the relation tables have completed traversing then resolving
+                                    if (currentCount === withTablesCount) {
+                                        _resetModel();
+                                        resolve(outcome);
+                                    }
                                 }
+                            } catch (exception) {
+                                _resetModel();
+                                reject(exception);
                             }
                         };
 
@@ -623,11 +765,6 @@ function indexeddbProvider($windowProvider) {
                                 //if relation does not have the index then adding it to list
                                 if (newValue[model.originalWithRelation[withTableName].field].indexOf(outcome._id) === -1) {
                                     newValue[model.originalWithRelation[withTableName].field].push(outcome._id);
-
-                                    outcome.Relations = outcome.Relations || {};
-                                    outcome.Relations[withTableName] = outcome.Relations[withTableName] || [];
-
-                                    outcome.Relations[withTableName].push(cursor.value);
 
                                     //case for many to many
                                     if (isMany) {
@@ -707,47 +844,53 @@ function indexeddbProvider($windowProvider) {
 
                     relationNames.forEach(function (withTableName) {
                         objectStoreTables[withTableName].index(model.originalWithRelation[withTableName].field).openCursor(bound).onsuccess = function (event) {
-                            var cursor = event.target.result;
-                            if (cursor) {
-                                var newValue = _updateValue(cursor.value, {}, true);
-                                if (newValue[model.originalWithRelation[withTableName].field] === undefined) {
-                                    cursor.continue();
-                                    return;
-                                }
-
-                                var index;
-                                if (isDestroy) {
-                                    value.forEach(function (_id) {
-                                        index = newValue[model.originalWithRelation[withTableName].field].indexOf(_id);
-
-                                        if (index !== -1) {
-                                            newValue[model.originalWithRelation[withTableName].field].splice(index, 1);
-                                        }
-                                    });
-                                } else {
-                                    index = newValue[model.originalWithRelation[withTableName].field].indexOf(value);
-
-                                    if (index === -1) {
+                            try {
+                                var cursor = event.target.result;
+                                if (cursor) {
+                                    var newValue = _updateValue(cursor.value, {}, true);
+                                    if (newValue[model.originalWithRelation[withTableName].field] === undefined) {
                                         cursor.continue();
                                         return;
                                     }
 
-                                    newValue[model.originalWithRelation[withTableName].field].splice(index, 1);
+                                    var index;
+                                    if (isDestroy) {
+                                        value.forEach(function (_id) {
+                                            index = newValue[model.originalWithRelation[withTableName].field].indexOf(_id);
+
+                                            if (index !== -1) {
+                                                newValue[model.originalWithRelation[withTableName].field].splice(index, 1);
+                                            }
+                                        });
+                                    } else {
+                                        index = newValue[model.originalWithRelation[withTableName].field].indexOf(value);
+
+                                        if (index === -1) {
+                                            cursor.continue();
+                                            return;
+                                        }
+
+                                        newValue[model.originalWithRelation[withTableName].field].splice(index, 1);
+                                    }
+
+
+                                    cursor.update(newValue);
+                                    cursor.continue();
+
+                                } else {
+
+                                    currentCount = currentCount + 1;
+
+                                    if (currentCount === withTablesCount) {
+                                        _resetModel();
+                                        resolve();
+                                    }
                                 }
-
-
-                                cursor.update(newValue);
-                                cursor.continue();
-
-                            } else {
-
-                                currentCount = currentCount + 1;
-
-                                if (currentCount === withTablesCount) {
-                                    _resetModel();
-                                    resolve();
-                                }
+                            } catch (exception) {
+                                _resetModel();
+                                reject(exception);
                             }
+
                         };
 
                         objectStoreTables[withTableName].onerror = function (error) {
@@ -773,8 +916,76 @@ function indexeddbProvider($windowProvider) {
 
                 //sorting where in/ where not in as number
                 function _sortAsNumbers(a, b) {
+
+                    //if desc then returning b-a for descesding values
+                    if (model.isDesc) {
+                        return (b - a);
+                    }
+
+                    //returinng ascending values
                     return (a - b);
                 }
+
+                function _setOrderSettings() {
+                    //setting wherein, wherenot in as values of is desc for sorting
+                    if (model.isDesc) {
+                        //case for descending order
+                        //if whereInValues are defined
+                        if (model.whereInValues !== null) {
+                            if (model.isWhereNumber) {
+                                model.whereInValues = model.whereInValues.sort(_sortAsNumbers);
+                                return;
+                            }
+
+                            model.whereInValues = model.whereInValues.reverse();
+                        }
+                        //if whereNotInValues are defined
+                        if (model.whereNotInValues !== null) {
+                            if (model.isWhereNumber) {
+                                model.whereNotInValues = model.whereNotInValues.sort(_sortAsNumbers);
+                                return;
+                            }
+
+                            model.whereNotInValues = model.whereNotInValues.reverse();
+                        }
+                    } else {
+                        //case for ascending order
+                        //if whereInValues are defined
+                        if (model.whereInValues !== null) {
+                            if (model.isWhereNumber) {
+                                model.whereInValues = model.whereInValues.sort(_sortAsNumbers);
+                                return;
+                            }
+
+                            model.whereInValues = model.whereInValues.sort();
+                        }
+                        //if whereNotInValues are defined
+                        if (model.whereNotInValues !== null) {
+                            if (model.isWhereNumber) {
+                                model.whereNotInValues = model.whereNotInValues.sort(_sortAsNumbers);
+                                return;
+                            }
+
+                            model.whereNotInValues = model.whereNotInValues.sort();
+
+                        }
+                    }
+                }
+
+                model.orderDesc = function (isDesc) {
+                    if (isDesc === true) {
+                        model.isDesc = true;
+                        model.traverse = 'prev';
+                        _setOrderSettings();
+
+                    } else {
+                        model.isDesc = false;
+                        model.traverse = 'next';
+                        _setOrderSettings();
+                    }
+
+                    return model;
+                };
 
                 //selecting index to make searches upon
                 model.select = function (index) {
@@ -835,49 +1046,72 @@ function indexeddbProvider($windowProvider) {
                     var getId = $q(function (resolve, reject) {
                         var transactionTables = [];
                         var relations = {};
+                        try {
 
-                        connection = self.indexdb.open(self.name);
-                        connection.onsuccess = function (event) {
-                            var db = event.target.result;
+                            connection = self.indexdb.open(self.name);
+                            connection.onsuccess = function (event) {
+                                try {
+                                    var db = event.target.result;
 
-                            transactionTables = _getTransactionTables();
-                            transaction = db.transaction(transactionTables);
+                                    transactionTables = _getTransactionTables();
+                                    transaction = db.transaction(transactionTables);
 
-                            if (model.hasWith) {
-                                transactionTables.splice(0, 1);
-                                transactionTables.forEach(function (withTableName) {
-                                    relations[withTableName] = transaction.objectStore(withTableName);
-                                });
-                            }
+                                    if (model.hasWith) {
+                                        transactionTables.splice(0, 1);
+                                        transactionTables.forEach(function (withTableName) {
+                                            relations[withTableName] = transaction.objectStore(withTableName);
+                                        });
+                                    }
 
-                            objectStore = transaction.objectStore(table.name);
+                                    objectStore = transaction.objectStore(table.name);
 
-                            //if index is set then searching on the index
-                            if (model.index !== null) {
-                                objectStore = objectStore.index(model.index);
-                            }
-                            objectStore.get(model.bound).onsuccess = function (record) {
+                                    //if index is set then searching on the index
+                                    if (model.index !== null) {
+                                        objectStore = objectStore.index(model.index);
+                                    }
 
-                                if (model.hasWith) {
-                                    _getWithAllData(resolve, reject, record.target.result, relations, true);
+                                    objectStore = objectStore.get(model.bound);
+                                    objectStore.onsuccess = function (record) {
+                                        try {
 
-                                } else {
+                                            if (model.hasWith) {
+                                                _getWithAllData(resolve, reject, record.target.result, relations, true);
+
+                                            } else {
+                                                _resetModel();
+                                                resolve(record.target.result);
+                                            }
+                                        } catch (exception) {
+                                            _resetModel();
+                                            reject(exception);
+                                        }
+                                    };
+
+                                    objectStore.onerror = function (error) {
+                                        _resetModel();
+                                        reject(error);
+                                    };
+
+                                    transaction.onerror = function (error) {
+                                        _resetModel();
+                                        reject(error);
+                                    };
+
+                                } catch (exception) {
                                     _resetModel();
-                                    resolve(record.target.result);
+                                    reject(exception);
                                 }
                             };
 
-
-                            transaction.onerror = function (err) {
+                            connection.onerror = function (error) {
                                 _resetModel();
-                                reject(err.srcElement.error);
+                                reject(error);
                             };
-                        };
-
-                        connection.onerror = function (err) {
+                        } catch (exception) {
                             _resetModel();
-                            reject(err.srcElement.error);
-                        };
+                            reject(exception);
+                        }
+
                     });
 
                     return getId;
@@ -887,58 +1121,75 @@ function indexeddbProvider($windowProvider) {
                 model.add = function (data) {
 
                     var add = $q(function (resolve, reject) {
-                        var transactionTables = [];
-                        var relations = {};
+                        try {
 
-                        connection = self.indexdb.open(self.name);
-                        connection.onsuccess = function (event) {
+                            var transactionTables = [];
+                            var relations = {};
 
-                            var db = event.target.result;
+                            connection = self.indexdb.open(self.name);
+                            connection.onsuccess = function (event) {
+                                try {
+                                    var db = event.target.result;
 
-                            transactionTables = _getTransactionTables();
-                            transaction = db.transaction(transactionTables, "readwrite");
+                                    transactionTables = _getTransactionTables();
+                                    transaction = db.transaction(transactionTables, "readwrite");
 
-                            if (model.hasWith) {
-                                transactionTables.splice(0, 1);
-                                transactionTables.forEach(function (withTableName) {
-                                    relations[withTableName] = transaction.objectStore(withTableName);
-                                });
-                            }
+                                    if (model.hasWith) {
+                                        transactionTables.splice(0, 1);
+                                        transactionTables.forEach(function (withTableName) {
+                                            relations[withTableName] = transaction.objectStore(withTableName);
+                                        });
+                                    }
 
-                            objectStore = transaction.objectStore(table.name);
-                            if (table.hasTimeStamp) {
-                                data.updatedAt = Date.parse(Date());
-                                data.createdAt = Date.parse(Date());
-                            }
-                            objectStore = objectStore.add(data);
+                                    objectStore = transaction.objectStore(table.name);
+                                    if (table.hasTimeStamp) {
+                                        data.updatedAt = Date.parse(Date());
+                                        data.createdAt = Date.parse(Date());
+                                    }
+                                    objectStore = objectStore.add(data);
 
-                            objectStore.onsuccess = function (event) {
-                                var result;
-                                result = data;
+                                    objectStore.onsuccess = function (event) {
+                                        try {
+                                            var result;
+                                            result = data;
 
-                                //adding key path value to the data object after adding
-                                result[table.fields.keyPathField] = event.target.result;
+                                            //adding key path value to the data object after adding
+                                            result[table.fields.keyPathField] = event.target.result;
 
-                                if (model.hasWith) {
-                                    _addWithData(resolve, reject, result, relations, transaction);
-                                } else {
+                                            if (model.hasWith) {
+                                                _addWithData(resolve, reject, result, relations, transaction);
+                                            } else {
+                                                _resetModel();
+                                                resolve(result);
+
+                                            }
+
+                                        } catch (exception) {
+                                            _resetModel();
+                                            reject(exception);
+                                        }
+
+                                    };
+
+                                    transaction.onerror = function (event) {
+                                        _resetModel();
+                                        reject(event.srcElement.error);
+                                    };
+                                } catch (exception) {
                                     _resetModel();
-                                    resolve(result);
-
+                                    reject(exception);
                                 }
+
+
                             };
 
-                            transaction.onerror = function (event) {
+                            connection.onerror = function (error) {
                                 _resetModel();
-                                reject(event.srcElement.error);
+                                reject(error);
                             };
-
-                        };
-
-                        connection.onerror = function (event) {
-                            _resetModel();
-                            reject(event.srcElement.error);
-                        };
+                        } catch (exception) {
+                            reject(exception);
+                        }
                     });
 
                     return add;
@@ -951,53 +1202,79 @@ function indexeddbProvider($windowProvider) {
                     var inserted = 0; //no of records inserted
 
                     var add = $q(function (resolve, reject) {
+                        try {
+                            connection = self.indexdb.open(self.name);
+                            connection.onsuccess = function (event) {
+                                try {
 
-                        connection = self.indexdb.open(self.name);
-                        connection.onsuccess = function (event) {
+                                    var db = event.target.result;
+                                    transaction = db.transaction([table.name], "readwrite");
 
-                            var db = event.target.result;
-                            transaction = db.transaction([table.name], "readwrite");
-                            objectStore = transaction.objectStore(table.name);
+                                    try {
 
-                            //for each record
-                            data.forEach(function (toAddData) {
+                                        objectStore = transaction.objectStore(table.name);
+                                        //for each record
+                                        data.forEach(function (toAddData) {
 
-                                //adding time stamps if allowed
-                                if (table.hasTimeStamp) {
-                                    toAddData.updatedAt = Date.parse(Date());
-                                    toAddData.createdAt = Date.parse(Date());
+                                            //adding time stamps if allowed
+                                            if (table.hasTimeStamp) {
+                                                toAddData.updatedAt = Date.parse(Date());
+                                                toAddData.createdAt = Date.parse(Date());
+                                            }
+
+                                            //single add instance
+                                            objectStore.add(toAddData).onsuccess = function (event) {
+                                                try {
+                                                    var result;
+                                                    result = data[inserted];
+
+                                                    //adding newly inserted key path value to the object
+                                                    result[table.fields.keyPathField] = event.target.result;
+
+                                                    outcome.push(result);
+                                                    inserted = inserted + 1;
+
+                                                    //if inserted count is equal to total no of records then resolving
+                                                    if (inserted === count) {
+                                                        _resetModel();
+                                                        resolve(outcome);
+                                                    }
+                                                } catch (exception) {
+                                                    _resetModel();
+                                                    reject(exception);
+                                                }
+
+                                            };
+                                        });
+
+                                    } catch (exception) {
+                                        _resetModel();
+                                        reject(exception);
+                                        return;
+                                    }
+
+
+                                    transaction.onerror = function (event) {
+                                        _resetModel();
+                                        reject(event.srcElement.error);
+                                    };
+                                } catch (exception) {
+                                    _resetModel();
+                                    reject(exception);
                                 }
 
-                                //single add instance
-                                objectStore.add(toAddData).onsuccess = function (event) {
-                                    var result;
-                                    result = data[inserted];
+                            };
 
-                                    //adding newly inserted key path value to the object
-                                    result[table.fields.keyPathField] = event.target.result;
-
-                                    outcome.push(result);
-                                    inserted = inserted + 1;
-
-                                    //if inserted count is equal to total no of records then resolving
-                                    if (inserted === count) {
-                                        _resetModel();
-                                        resolve(outcome);
-                                    }
-                                };
-                            });
-
-                            transaction.onerror = function (event) {
+                            connection.onerror = function (event) {
                                 _resetModel();
                                 reject(event.srcElement.error);
                             };
 
-                        };
-
-                        connection.onerror = function (event) {
+                        } catch (exception) {
                             _resetModel();
-                            reject(event.srcElement.error);
-                        };
+                            reject(exception);
+                        }
+
                     });
 
                     return add;
@@ -1014,9 +1291,12 @@ function indexeddbProvider($windowProvider) {
                 //where in model function for setting whereInValues
                 model.whereIn = function (inValues, sortAsNumbers) {
 
-                    sortAsNumbers = (sortAsNumbers === undefined) ? false : sortAsNumbers;
-                    inValues = (sortAsNumbers === true) ? inValues.sort(_sortAsNumbers) : inValues.sort();
+                    sortAsNumbers = (sortAsNumbers === true) ? true : false;
                     model.whereInValues = inValues;
+
+                    model.isWhereNumber = sortAsNumbers; //setting whereIn as number type
+
+                    _setOrderSettings(); //sorting whereInValues as order type
 
                     return model;
                 };
@@ -1068,7 +1348,15 @@ function indexeddbProvider($windowProvider) {
                                 }
                             }
 
-                            //first checking if model has whereInvalues then where not else default getAll
+                            //checking for likeness in data
+                            if (model.likeString !== null) {
+                                if (_checkLikeString(result.key) === false) {
+                                    result.continue();
+                                    return;
+                                }
+                            }
+
+                            //first checking if model has whereInValues then where not else default getAll
                             if (model.whereInValues !== null) {
                                 count = _whereIn(result, outcome, count, model.whereInValues);
 
@@ -1098,53 +1386,72 @@ function indexeddbProvider($windowProvider) {
                 //function sets where not in values for model
                 model.whereNotIn = function (notInValues, sortAsNumbers) {
 
-                    sortAsNumbers = (sortAsNumbers === undefined) ? false : sortAsNumbers;
-                    notInValues = (sortAsNumbers === true) ? notInValues.sort(_sortAsNumbers) : notInValues.sort();
+                    sortAsNumbers = (sortAsNumbers === true) ? true : false;
                     model.whereNotInValues = notInValues;
 
+                    model.isWhereNumber = sortAsNumbers; //setting whereNotInValues as number type
+
+                    _setOrderSettings(); //setting whereNotInValues as asc or desc type
                     return model;
                 };
 
                 //wrapper function firing default put on the indexed db
                 model.put = function (data) {
                     var put = $q(function (resolve, reject) {
+                        try {
 
-                        connection = self.indexdb.open(self.name);
-                        connection.onsuccess = function (event) {
+                            connection = self.indexdb.open(self.name);
+                            connection.onsuccess = function (event) {
 
-                            var db = event.target.result;
-                            transaction = db.transaction([table.name], "readwrite");
-                            objectStore = transaction.objectStore(table.name);
+                                var db = event.target.result;
+                                transaction = db.transaction([table.name], "readwrite");
+                                objectStore = transaction.objectStore(table.name);
 
-                            if (table.hasTimeStamp) {
-                                data.updatedAt = Date.parse(Date());
+                                if (table.hasTimeStamp) {
+                                    data.updatedAt = Date.parse(Date());
 
-                                if (data.createdAt === undefined) {
-                                    data.createdAt = Date.parse(Date());
+                                    if (data.createdAt === undefined) {
+                                        data.createdAt = Date.parse(Date());
+                                    }
                                 }
-                            }
 
-                            //firing put method
-                            objectStore = objectStore.put(data);
+                                //firing put method
+                                objectStore = objectStore.put(data);
 
-                            objectStore.onsuccess = function (event) {
-                                //adding newly/existing key path value to the object
-                                data[table.keyPathField] = event.target.result;
-                                _resetModel();
-                                resolve(data);
+                                objectStore.onsuccess = function (event) {
+                                    try {
+                                        //adding newly/existing key path value to the object
+                                        data[table.keyPathField] = event.target.result;
+                                        _resetModel();
+                                        resolve(data);
+
+                                    } catch (exception) {
+                                        _resetModel();
+                                        reject(exception);
+                                    }
+                                };
+
+                                objectStore.onerror = function (error) {
+                                    _resetModel();
+                                    reject(error);
+                                };
+
+                                transaction.onerror = function (error) {
+                                    _resetModel();
+                                    reject(error);
+                                };
+
                             };
 
-                            transaction.onerror = function (event) {
+                            connection.onerror = function (event) {
                                 _resetModel();
                                 reject(event.srcElement.error);
                             };
-
-                        };
-
-                        connection.onerror = function (event) {
+                        } catch (exception) {
                             _resetModel();
-                            reject(event.srcElement.error);
-                        };
+                            reject(exception);
+                        }
+
                     });
 
                     return put;
@@ -1173,6 +1480,14 @@ function indexeddbProvider($windowProvider) {
                                 }
                             }
 
+                            //checking for likeness in data
+                            if (model.likeString !== null) {
+                                if (_checkLikeString(result.key) === false) {
+                                    result.continue();
+                                    return;
+                                }
+                            }
+
                             //first for whereIn model values then whereNotIn else default
                             if (model.whereInValues !== null) {
                                 count = _whereInUpdate(result, count, data);
@@ -1181,7 +1496,13 @@ function indexeddbProvider($windowProvider) {
                                 _whereNotInUpdate(result, notInCaseInsensitiveArray, data);
 
                             } else {
-                                newValue = _updateValue(result, data);
+                                newValue = _updateValue(result.value, data);
+
+                                //setting with relation data to the record as well
+                                if (model.hasWith) {
+                                    newValue = _updateWithRelation(newValue, model.originalWithRelation);
+                                }
+
                                 result.update(newValue);
                                 result.continue();
                             }
@@ -1210,46 +1531,62 @@ function indexeddbProvider($windowProvider) {
                     }
 
                     var deleteId = $q(function (resolve, reject) {
-                        connection = self.indexdb.open(self.name);
-                        connection.onsuccess = function (event) {
+                        try {
 
-                            var db = event.target.result;
-                            var relations = {};
+                            connection = self.indexdb.open(self.name);
+                            connection.onsuccess = function (event) {
 
-                            var transactionTables = _getTransactionTables();
-                            transaction = db.transaction(transactionTables, 'readwrite');
+                                var db = event.target.result;
+                                var relations = {};
 
-                            if (model.hasWith) {
-                                transactionTables.splice(0, 1);
-                                transactionTables.forEach(function (withTableName) {
-                                    relations[withTableName] = transaction.objectStore(withTableName);
-                                });
-                            }
-
-                            objectStore = transaction.objectStore(table.name);
-
-                            objectStore = objectStore.delete(value); //firing default delete
-
-                            objectStore.onsuccess = function () {
+                                var transactionTables = _getTransactionTables();
+                                transaction = db.transaction(transactionTables, 'readwrite');
 
                                 if (model.hasWith) {
-                                    _deleteWith(resolve, reject, value, relations);
-                                } else {
-                                    _resetModel();
-                                    resolve();
+                                    transactionTables.splice(0, 1);
+                                    transactionTables.forEach(function (withTableName) {
+                                        relations[withTableName] = transaction.objectStore(withTableName);
+                                    });
                                 }
+
+                                objectStore = transaction.objectStore(table.name);
+
+                                objectStore = objectStore.delete(value); //firing default delete
+
+                                objectStore.onsuccess = function () {
+                                    try {
+                                        if (model.hasWith) {
+                                            _deleteWith(resolve, reject, value, relations);
+                                        } else {
+                                            _resetModel();
+                                            resolve();
+                                        }
+                                    } catch (exception) {
+                                        _resetModel();
+                                        reject(exception);
+                                    }
+
+                                };
+
+                                objectStore.onerror = function (error) {
+                                    _resetModel();
+                                    reject(error);
+                                };
+
+                                transaction.onerror = function (error) {
+                                    _resetModel();
+                                    reject(error);
+                                };
                             };
 
-                            transaction.onerror = function (err) {
+                            connection.onerror = function (error) {
                                 _resetModel();
-                                reject(err.srcElement.error);
+                                reject(error);
                             };
-                        };
-
-                        connection.onerror = function (err) {
+                        } catch (exception) {
                             _resetModel();
-                            reject(err.srcElement.error);
-                        };
+                            reject(exception);
+                        }
                     });
 
                     return deleteId;
@@ -1268,6 +1605,14 @@ function indexeddbProvider($windowProvider) {
                             //if model has filter
                             if (model.hasFilter) {
                                 if (model.filterFunction(result.value) !== true) {
+                                    result.continue();
+                                    return;
+                                }
+                            }
+
+                            //checking for likeness in data
+                            if (model.likeString !== null) {
+                                if (_checkLikeString(result.key) === false) {
                                     result.continue();
                                     return;
                                 }
@@ -1309,6 +1654,15 @@ function indexeddbProvider($windowProvider) {
                     model.originalWithRelation = relations; //keeping a record of original relation data
                     model.withRelation = _setWithRelation(relations); //setting objects for using with relations
 
+                    return model;
+                };
+
+                model.like = function (likeString) {
+                    if (likeString === undefined) {
+                        throw "Invalid input given to like";
+                    }
+
+                    model.likeString = likeString.toString();
                     return model;
                 };
             }
