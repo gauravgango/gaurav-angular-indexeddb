@@ -80,9 +80,10 @@ function indexeddbProvider($windowProvider) {
                     model.whereNotInValues = null; //default whereNotInValues for whereNotIn
                     model.withTables = {}; //with tables structure
                     model.hasWith = false; //default has with relation status
-                    model.isDesc = false;
-                    model.traverse = 'next';
-                    model.isWhereNumber = false;
+                    model.isDesc = false; //default descending travers set to false
+                    model.traverse = 'next'; //default travering set to ascending
+                    model.isWhereNumber = false; //default where claues not containing number
+                    model.originalWithRelation = null; //default original with relation data
                 }
 
                 _resetModel();
@@ -285,10 +286,41 @@ function indexeddbProvider($windowProvider) {
                     return newValue;
                 }
 
+                //private : function updates the relations indexes by adding new values
+                function _updateWithRelation(record, data) {
+                    //retrievinging properties to be updated
+                    var properties = Object.keys(data);
+
+                    properties.forEach(function (property) {
+                        //if property in main record is undefined
+                        if (record[property] === undefined) {
+                            record[property] = [];
+                        }
+                        data[property].forEach(function (relation) {
+                            //checking if relation already exists if not then adding
+
+                            //if relation is greter than or equla to zero then adding the relation
+                            if (relation >= 0) {
+                                if (record[property].indexOf(relation) === -1) {
+                                    record[property].push(relation);
+                                }
+                            } else {
+                                //else removing relation
+                                var index = record[property].indexOf(relation * (-1));
+                                if (index !== -1) {
+                                    record[property].splice(index, 1);
+                                }
+                            }
+                        });
+                    });
+
+                    return record;
+                }
+
                 //private : where in logic for update condition. When condition passes the system updates the object in current location
                 function _whereInUpdate(result, count, data) {
                     var toUpdate = false;
-                    var newValue = _updateValue(result.value, data);
+                    var newValue;
 
                     //if case sensitive then checking throughout th database
                     if (model.caseInsensitive) {
@@ -303,6 +335,12 @@ function indexeddbProvider($windowProvider) {
 
 
                         if (toUpdate) {
+                            newValue = _updateValue(result.value, data);
+
+                            //setting with relation data to the record as well
+                            if (model.hasWith) {
+                                newValue = _updateWithRelation(newValue, model.originalWithRelation);
+                            }
                             result.update(newValue);
                         }
 
@@ -334,6 +372,13 @@ function indexeddbProvider($windowProvider) {
                         return count;
 
                     }
+
+                    newValue = _updateValue(result.value, data);
+
+                    //setting with relation data to the record as well
+                    if (model.hasWith) {
+                        newValue = _updateWithRelation(newValue, model.originalWithRelation);
+                    }
                     //pushing to outcome array
                     result.update(newValue);
                     count = count + 1;
@@ -344,7 +389,7 @@ function indexeddbProvider($windowProvider) {
                 //private : function for where not in logic for update scenario
                 function _whereNotInUpdate(result, notInCaseInsensitiveArray, data) {
 
-                    var newValue = _updateValue(result.value, data); //data to be updated
+                    var newValue;
 
                     //case sensitive
                     if (model.caseInsensitive) {
@@ -357,11 +402,23 @@ function indexeddbProvider($windowProvider) {
                         });
 
                         if (notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
+                            newValue = _updateValue(result.value, data); //data to be updated
+
+                            //setting with relation data to the record as well
+                            if (model.hasWith) {
+                                newValue = _updateWithRelation(newValue, model.originalWithRelation);
+                            }
                             result.update(newValue);
                         }
 
                     } else {
                         if (model.whereNotInValues.indexOf(result.key) === -1) {
+                            newValue = _updateValue(result.value, data); //data to be updated
+
+                            //setting with relation data to the record as well
+                            if (model.hasWith) {
+                                newValue = _updateWithRelation(newValue, model.originalWithRelation);
+                            }
                             result.update(newValue);
                         }
                     }
@@ -1295,7 +1352,13 @@ function indexeddbProvider($windowProvider) {
                                 _whereNotInUpdate(result, notInCaseInsensitiveArray, data);
 
                             } else {
-                                newValue = _updateValue(result, data);
+                                newValue = _updateValue(result.value, data);
+
+                                //setting with relation data to the record as well
+                                if (model.hasWith) {
+                                    newValue = _updateWithRelation(newValue, model.originalWithRelation);
+                                }
+
                                 result.update(newValue);
                                 result.continue();
                             }
