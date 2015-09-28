@@ -1651,15 +1651,7 @@ function indexeddbProvider($windowProvider) {
                         table.fields.keyPathField = objectStore.keyPath;
                     }
 
-                    //checking indexes given exists inside the table in indexeddb
-                    table.fields.other.forEach(function (name, index) {
-                        if (objectStore.indexNames.indexOf(name) === -1) {
-                            table.fields.other.splic(index, 1);
-                        }
-                    });
-
                     self.models[table.name] = {};
-
                     //setting getter instance of object as new CreateModel instance
                     Object.defineProperty(self.models, table.name, {
                         get: function () {
@@ -1811,14 +1803,17 @@ function indexeddbProvider($windowProvider) {
             _setTables();
 
             self.open.then(function (event) {
+                var l, table;
                 //when database is being upgraded
                 if (event.type === "upgradeneeded") {
                     _createTables(event.target.result);
 
                 } else {
-                    self.tables.forEach(function (table) {
+                    for (l = self.tables.length - 1; l >= 0; l--) {
+                        table = self.tables[l];
                         _createModelInstance(event.target.result, table);
-                    });
+
+                    }
                 }
                 qRes(self);
 
