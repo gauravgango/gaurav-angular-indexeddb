@@ -230,12 +230,11 @@ function indexeddbProvider($windowProvider) {
                  * The where in logic for the object store
                  * @param  {IDBCursor} result             [contains current cursor value]
                  * @param  {array} outcome            [contains final result where if condition passed data will be pushed]
-                 * @param  {integer} count              [current count of where in values iteration]
                  * @param  {array} whereInValues      [whereIn values to search for]
                  * @param  {boolean} useCaseInsensitive [override case sensitive search]
                  * @return {integer}                    [returns new count value of next cursor]
                  */
-                function _whereIn(result, outcome, count, isDesc, traverse, whereInValues, useCaseInsensitive) {
+                function _whereIn(result, outcome, whereInValues, useCaseInsensitive) {
 
                     useCaseInsensitive = (useCaseInsensitive === undefined) ? true : useCaseInsensitive;
 
@@ -255,37 +254,14 @@ function indexeddbProvider($windowProvider) {
                         return 0;
                     }
 
-                    //case for case sensitive
-                    //case when where is is desc
-                    if (isDesc) {
-                        //if key less than current value
-                        if (result.key < whereInValues[count]) {
-                            count = count + 1;
-                            result.continue();
-                            return count;
-                        }
-                    } else {
-                        //case for ascending
-                        //if key greater than current value
-                        if (result.key > whereInValues[count]) {
-                            count = count + 1;
-                            result.continue();
-                            return count;
-                        }
+                    if (whereInValues.indexOf(result.key) === -1) {
+                        result.continue();
+                        return;
                     }
-
-                    //if key not equal to current value then jumping to next
-                    if (result.key !== whereInValues[count]) {
-                        result.continue(whereInValues[count], traverse);
-                        return count;
-                    }
-
 
                     //pushing to outcome array
                     outcome.push(result.value);
-                    count = count + 1;
-                    result.continue(whereInValues[count], traverse);
-                    return count;
+                    result.continue();
                 }
 
                 //private : function returns new object value to be updated with timestamps
@@ -342,7 +318,7 @@ function indexeddbProvider($windowProvider) {
                 }
 
                 //private : where in logic for update condition. When condition passes the system updates the object in current location
-                function _whereInUpdate(result, count, data) {
+                function _whereInUpdate(result, data) {
                     var toUpdate = false;
                     var newValue;
 
@@ -357,7 +333,6 @@ function indexeddbProvider($windowProvider) {
                             }
                         });
 
-
                         if (toUpdate) {
                             newValue = _updateValue(result.value, data);
 
@@ -369,45 +344,22 @@ function indexeddbProvider($windowProvider) {
                         }
 
                         result.continue();
-                        return 0;
-                    }
-                    //case for case sensitive
-                    //case when where is is desc
-                    if (model.isDesc) {
-                        //if key less than current value
-                        if (result.key < model.whereInValues[count]) {
-                            count = count + 1;
-                            result.continue();
-                            return count;
-                        }
-                    } else {
-                        //case for ascending
-                        //if key greater than current value
-                        if (result.key > model.whereInValues[count]) {
-                            count = count + 1;
-                            result.continue();
-                            return count;
-                        }
+                        return;
                     }
 
-                    //if key not equal to current value then jumping to next
-                    if (result.key !== model.whereInValues[count]) {
-                        result.continue(model.whereInValues[count]);
-                        return count;
-
+                    if (model.whereInValues.indexOf(result.key) === -1) {
+                        result.continue();
+                        return;
                     }
 
                     newValue = _updateValue(result.value, data);
-
                     //setting with relation data to the record as well
                     if (model.hasWith) {
                         newValue = _updateWithRelation(newValue, model.originalWithRelation);
                     }
                     //pushing to outcome array
                     result.update(newValue);
-                    count = count + 1;
-                    result.continue(model.whereInValues[count]);
-                    return count;
+                    result.continue();
                 }
 
                 //private : function for where not in logic for update scenario
@@ -452,7 +404,7 @@ function indexeddbProvider($windowProvider) {
 
 
                 //private : where in logic for deleting object
-                function _whereInDestroy(result, count, deletedIds) {
+                function _whereInDestroy(result, deletedIds) {
                     var toDelete = false;
 
                     //if case sensitive then checking throughout th database
@@ -472,41 +424,20 @@ function indexeddbProvider($windowProvider) {
                             result.delete();
                         }
                         result.continue();
-                        return 0;
+                        return;
                     }
 
-                    //case for case sensitive
-                    //case when where is is desc
-                    if (model.isDesc) {
-                        //if key less than current value
-                        if (result.key < model.whereInValues[count]) {
-                            count = count + 1;
-                            result.continue();
-                            return count;
-                        }
-                    } else {
-                        //case for ascending
-                        //if key greater than current value
-                        if (result.key > model.whereInValues[count]) {
-                            count = count + 1;
-                            result.continue();
-                            return count;
-                        }
-                    }
-
-                    //if key not equal to current value then jumping to next
-                    if (result.key !== model.whereInValues[count]) {
-                        result.continue(model.whereInValues[count]);
-                        return count;
+                    if (model.whereInValues.indexOf(result.key) === -1) {
+                        result.continue();
+                        return;
                     }
 
                     deletedIds.push(result.value[table.fields.keyPathField]);
 
                     //pushing to outcome array
                     result.delete();
-                    count = count + 1;
-                    result.continue(model.whereInValues[count]);
-                    return count;
+                    result.continue();
+                    return;
                 }
 
                 //private : where not in logic for deleting
@@ -596,7 +527,6 @@ function indexeddbProvider($windowProvider) {
                             Relations[withTableName] = [];
                         }
 
-                        var count = 0;
                         var currentOutcome = [];
                         var hasFilter = false;
 
@@ -633,13 +563,12 @@ function indexeddbProvider($windowProvider) {
                                     if (hasFilter) {
 
                                         if (model.originalWithRelation[withTableName].filter(cursor.value) !== true) {
-                                            count = count + 1;
-                                            cursor.continue(_id[count]);
+                                            cursor.continue();
                                             return;
                                         }
                                     }
 
-                                    count = _whereIn(cursor, currentOutcome, count, false, 'next', _id, false);
+                                    _whereIn(cursor, currentOutcome, _id, false);
 
                                 } else {
                                     //when traversing is done
@@ -1000,7 +929,7 @@ function indexeddbProvider($windowProvider) {
                             lower = _changeCase(angular.copy(model.bound.lower), true);
                             incLower = (model.bound.lowerOpen === undefined) ? false : angular.copy(model.bound.lowerOpen);
                             upper = _changeCase(angular.copy(model.bound.upper));
-                            incUpper = (model.bound.upper === undefined) ? false : angular.copy(model.bound.upper);
+                            incUpper = (model.bound.upperOpen === undefined) ? false : angular.copy(model.bound.upperOpen);
 
                             //if lower bound is undefined then setting only upper bound
                             if (model.bound.lower === undefined) {
@@ -1295,7 +1224,6 @@ function indexeddbProvider($windowProvider) {
                 //function is default getAll function retrieves all data
                 model.getAll = function () {
                     var outcome = [];
-                    var count = 0;
                     var notInCaseInsensitiveArray = [];
 
                     var getId = _get(function (event, resolve, reject, withTables) {
@@ -1321,7 +1249,7 @@ function indexeddbProvider($windowProvider) {
 
                             //first checking if model has whereInValues then where not else default getAll
                             if (model.whereInValues !== null) {
-                                count = _whereIn(result, outcome, count, model.isDesc, model.traverse, model.whereInValues);
+                                _whereIn(result, outcome, model.whereInValues);
 
                             } else if (model.whereNotInValues !== null) {
                                 _whereNotIn(result, outcome, notInCaseInsensitiveArray);
@@ -1419,7 +1347,6 @@ function indexeddbProvider($windowProvider) {
                         throw "Data must be type of object";
                     }
 
-                    var count = 0;
                     var notInCaseInsensitiveArray = [];
 
                     var update = _get(function (event, resolve) {
@@ -1446,7 +1373,7 @@ function indexeddbProvider($windowProvider) {
 
                             //first for whereIn model values then whereNotIn else default
                             if (model.whereInValues !== null) {
-                                count = _whereInUpdate(result, count, data);
+                                _whereInUpdate(result, data);
 
                             } else if (model.whereNotInValues !== null) {
                                 _whereNotInUpdate(result, notInCaseInsensitiveArray, data);
@@ -1543,7 +1470,6 @@ function indexeddbProvider($windowProvider) {
 
                 //function to delete on cursor location
                 model.destroy = function () {
-                    var count = 0;
                     var notInCaseInsensitiveArray = [];
                     var deletedIds = [];
 
@@ -1569,7 +1495,7 @@ function indexeddbProvider($windowProvider) {
 
                             //first whereIn then whereNotIn else default destroy
                             if (model.whereInValues !== null) {
-                                count = _whereInDestroy(result, count, deletedIds);
+                                _whereInDestroy(result, deletedIds);
 
                             } else if (model.whereNotInValues !== null) {
                                 _wherNotInDestroy(result, notInCaseInsensitiveArray, deletedIds);
