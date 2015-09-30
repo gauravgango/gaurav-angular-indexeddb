@@ -70,7 +70,7 @@ function indexeddbProvider($windowProvider) {
                 var transaction;
                 var objectStore;
 
-                function _resetModel() {
+                function _defaultModelSettings() {
                     model.bound = null; //default bound value
                     model.index = null; //default index value
                     model.caseInsensitive = false; //default caseInsensitive value
@@ -87,7 +87,7 @@ function indexeddbProvider($windowProvider) {
                     model.likeString = null; //default likeString data
                 }
 
-                _resetModel();
+                _defaultModelSettings();
 
                 //private : function returns array of table names to perform transaction on
                 function _getTransactionTables() {
@@ -166,29 +166,24 @@ function indexeddbProvider($windowProvider) {
                                         callback(event, resolve, reject, relations);
 
                                     } catch (exception) {
-                                        _resetModel();
                                         reject(exception);
                                     }
                                 };
 
                                 objectStore.onerror = function (error) {
-                                    _resetModel();
                                     reject(error);
                                 };
 
                                 transaction.onerror = function (error) {
-                                    _resetModel();
                                     reject(error);
                                 };
                             };
 
                             connection.onerror = function (error) {
-                                _resetModel();
                                 reject(error);
                             };
 
                         } catch (exception) {
-                            _resetModel();
                             reject(exception);
                         }
                     });
@@ -240,7 +235,7 @@ function indexeddbProvider($windowProvider) {
                  * @param  {boolean} useCaseInsensitive [override case sensitive search]
                  * @return {integer}                    [returns new count value of next cursor]
                  */
-                function _whereIn(result, outcome, count, whereInValues, useCaseInsensitive) {
+                function _whereIn(result, outcome, count, isDesc, traverse, whereInValues, useCaseInsensitive) {
 
                     useCaseInsensitive = (useCaseInsensitive === undefined) ? true : useCaseInsensitive;
 
@@ -262,7 +257,7 @@ function indexeddbProvider($windowProvider) {
 
                     //case for case sensitive
                     //case when where is is desc
-                    if (model.isDesc) {
+                    if (isDesc) {
                         //if key less than current value
                         if (result.key < whereInValues[count]) {
                             count = count + 1;
@@ -281,7 +276,7 @@ function indexeddbProvider($windowProvider) {
 
                     //if key not equal to current value then jumping to next
                     if (result.key !== whereInValues[count]) {
-                        result.continue(whereInValues[count], model.traverse);
+                        result.continue(whereInValues[count], traverse);
                         return count;
                     }
 
@@ -289,7 +284,7 @@ function indexeddbProvider($windowProvider) {
                     //pushing to outcome array
                     outcome.push(result.value);
                     count = count + 1;
-                    result.continue(whereInValues[count], model.traverse);
+                    result.continue(whereInValues[count], traverse);
                     return count;
                 }
 
@@ -559,15 +554,12 @@ function indexeddbProvider($windowProvider) {
                     //checking if outcome is not empty
                     if (isFind) {
                         if (outcome === undefined) {
-
-                            _resetModel();
                             resolve(outcome);
                             return;
                         }
 
                     } else {
                         if (outcome.length === 0) {
-                            _resetModel();
                             resolve(outcome);
                             return;
                         }
@@ -613,7 +605,6 @@ function indexeddbProvider($windowProvider) {
                             hasFilter = true;
                         }
                         if (_id === undefined || _id.constructor !== Array) {
-                            _resetModel();
                             resolve(outcome);
                         }
 
@@ -648,7 +639,7 @@ function indexeddbProvider($windowProvider) {
                                         }
                                     }
 
-                                    count = _whereIn(cursor, currentOutcome, count, _id, false);
+                                    count = _whereIn(cursor, currentOutcome, count, false, 'next', _id, false);
 
                                 } else {
                                     //when traversing is done
@@ -689,19 +680,16 @@ function indexeddbProvider($windowProvider) {
 
                                     //when all of the relation tables have completed traversing then resolving
                                     if (currentCount === withTablesCount) {
-                                        _resetModel();
                                         resolve(outcome);
                                     }
                                 }
                             } catch (exception) {
-                                _resetModel();
                                 reject(exception);
                             }
                         };
 
                         //case or error of in relation object store
                         objectStoreTables[withTableName].openCursor(self.keyRange.bound(_id[0], _id[(_id.length - 1)])).onerror = function (e) {
-                            _resetModel();
                             reject(e);
                         };
                     });
@@ -779,7 +767,7 @@ function indexeddbProvider($windowProvider) {
                                 currentCount = currentCount + 1;
 
                                 //case for may then adding many relation to newly created object
-                                if (isMany) {
+                                if (isMany === true) {
                                     manyOutcome[model.originalWithRelation[withTableName].many.field] = many;
                                 }
 
@@ -792,17 +780,14 @@ function indexeddbProvider($windowProvider) {
                                         var newObjectStore = transaction.objectStore(table.name);
 
                                         newObjectStore.put(outcome).onsuccess = function () {
-                                            _resetModel();
                                             resolve(outcome);
                                         };
 
                                         newObjectStore.onerror = function (error) {
-                                            _resetModel();
                                             reject(error);
                                         };
 
                                     } else {
-                                        _resetModel();
                                         resolve(outcome);
                                     }
                                 }
@@ -810,7 +795,6 @@ function indexeddbProvider($windowProvider) {
                         };
 
                         objectStoreTables[withTableName].openCursor().onerror = function (error) {
-                            _resetModel();
                             reject(error);
                         };
                     });
@@ -882,19 +866,16 @@ function indexeddbProvider($windowProvider) {
                                     currentCount = currentCount + 1;
 
                                     if (currentCount === withTablesCount) {
-                                        _resetModel();
                                         resolve();
                                     }
                                 }
                             } catch (exception) {
-                                _resetModel();
                                 reject(exception);
                             }
 
                         };
 
                         objectStoreTables[withTableName].onerror = function (error) {
-                            _resetModel();
                             reject(error);
                         };
                     });
@@ -1078,37 +1059,30 @@ function indexeddbProvider($windowProvider) {
                                                 _getWithAllData(resolve, reject, record.target.result, relations, true);
 
                                             } else {
-                                                _resetModel();
                                                 resolve(record.target.result);
                                             }
                                         } catch (exception) {
-                                            _resetModel();
                                             reject(exception);
                                         }
                                     };
 
                                     objectStore.onerror = function (error) {
-                                        _resetModel();
                                         reject(error);
                                     };
 
                                     transaction.onerror = function (error) {
-                                        _resetModel();
                                         reject(error);
                                     };
 
                                 } catch (exception) {
-                                    _resetModel();
                                     reject(exception);
                                 }
                             };
 
                             connection.onerror = function (error) {
-                                _resetModel();
                                 reject(error);
                             };
                         } catch (exception) {
-                            _resetModel();
                             reject(exception);
                         }
 
@@ -1159,24 +1133,20 @@ function indexeddbProvider($windowProvider) {
                                             if (model.hasWith) {
                                                 _addWithData(resolve, reject, result, relations, transaction);
                                             } else {
-                                                _resetModel();
                                                 resolve(result);
 
                                             }
 
                                         } catch (exception) {
-                                            _resetModel();
                                             reject(exception);
                                         }
 
                                     };
 
                                     transaction.onerror = function (event) {
-                                        _resetModel();
                                         reject(event.srcElement.error);
                                     };
                                 } catch (exception) {
-                                    _resetModel();
                                     reject(exception);
                                 }
 
@@ -1184,7 +1154,6 @@ function indexeddbProvider($windowProvider) {
                             };
 
                             connection.onerror = function (error) {
-                                _resetModel();
                                 reject(error);
                             };
                         } catch (exception) {
@@ -1236,11 +1205,9 @@ function indexeddbProvider($windowProvider) {
 
                                                     //if inserted count is equal to total no of records then resolving
                                                     if (inserted === count) {
-                                                        _resetModel();
                                                         resolve(outcome);
                                                     }
                                                 } catch (exception) {
-                                                    _resetModel();
                                                     reject(exception);
                                                 }
 
@@ -1248,30 +1215,26 @@ function indexeddbProvider($windowProvider) {
                                         });
 
                                     } catch (exception) {
-                                        _resetModel();
                                         reject(exception);
                                         return;
                                     }
 
 
                                     transaction.onerror = function (event) {
-                                        _resetModel();
                                         reject(event.srcElement.error);
                                     };
                                 } catch (exception) {
-                                    _resetModel();
                                     reject(exception);
                                 }
 
                             };
 
                             connection.onerror = function (event) {
-                                _resetModel();
+
                                 reject(event.srcElement.error);
                             };
 
                         } catch (exception) {
-                            _resetModel();
                             reject(exception);
                         }
 
@@ -1358,7 +1321,7 @@ function indexeddbProvider($windowProvider) {
 
                             //first checking if model has whereInValues then where not else default getAll
                             if (model.whereInValues !== null) {
-                                count = _whereIn(result, outcome, count, model.whereInValues);
+                                count = _whereIn(result, outcome, count, model.isDesc, model.traverse, model.whereInValues);
 
                             } else if (model.whereNotInValues !== null) {
                                 _whereNotIn(result, outcome, notInCaseInsensitiveArray);
@@ -1375,7 +1338,6 @@ function indexeddbProvider($windowProvider) {
                                 _getWithAllData(resolve, reject, outcome, withTables);
 
                             } else {
-                                _resetModel();
                                 resolve(outcome);
                             }
                         }
@@ -1422,33 +1384,27 @@ function indexeddbProvider($windowProvider) {
                                     try {
                                         //adding newly/existing key path value to the object
                                         data[table.keyPathField] = event.target.result;
-                                        _resetModel();
                                         resolve(data);
 
                                     } catch (exception) {
-                                        _resetModel();
                                         reject(exception);
                                     }
                                 };
 
                                 objectStore.onerror = function (error) {
-                                    _resetModel();
                                     reject(error);
                                 };
 
                                 transaction.onerror = function (error) {
-                                    _resetModel();
                                     reject(error);
                                 };
 
                             };
 
                             connection.onerror = function (event) {
-                                _resetModel();
                                 reject(event.srcElement.error);
                             };
                         } catch (exception) {
-                            _resetModel();
                             reject(exception);
                         }
 
@@ -1508,7 +1464,6 @@ function indexeddbProvider($windowProvider) {
                             }
 
                         } else {
-                            _resetModel();
                             resolve();
                         }
                     }, true);
@@ -1558,33 +1513,27 @@ function indexeddbProvider($windowProvider) {
                                         if (model.hasWith) {
                                             _deleteWith(resolve, reject, value, relations);
                                         } else {
-                                            _resetModel();
                                             resolve();
                                         }
                                     } catch (exception) {
-                                        _resetModel();
                                         reject(exception);
                                     }
 
                                 };
 
                                 objectStore.onerror = function (error) {
-                                    _resetModel();
                                     reject(error);
                                 };
 
                                 transaction.onerror = function (error) {
-                                    _resetModel();
                                     reject(error);
                                 };
                             };
 
                             connection.onerror = function (error) {
-                                _resetModel();
                                 reject(error);
                             };
                         } catch (exception) {
-                            _resetModel();
                             reject(exception);
                         }
                     });
@@ -1635,7 +1584,6 @@ function indexeddbProvider($windowProvider) {
                             if (model.hasWith) {
                                 _deleteWith(resolve, reject, deletedIds, relations, true);
                             } else {
-                                _resetModel();
                                 resolve();
                             }
                         }
@@ -1693,6 +1641,25 @@ function indexeddbProvider($windowProvider) {
                 return field.keyPathValue;
             }
 
+            function _createModelInstance(db, table) {
+                var objectStore;
+                if (db.objectStoreNames.contains(table.name)) {
+                    objectStore = db.transaction([table.name]).objectStore(table.name);
+
+                    //checking if table given exists in indexeddb
+                    if (objectStore.keyPath !== table.fields.keyPathField) {
+                        table.fields.keyPathField = objectStore.keyPath;
+                    }
+
+                    self.models[table.name] = {};
+                    //setting getter instance of object as new CreateModel instance
+                    Object.defineProperty(self.models, table.name, {
+                        get: function () {
+                            return new CreateModel(table);
+                        }
+                    });
+                }
+            }
 
             /**
              * Private : function creates tables when upgrade function is fired
@@ -1719,40 +1686,65 @@ function indexeddbProvider($windowProvider) {
                         });
                     }
 
-                    self.models[table.name] = new CreateModel(table);
+                    self.models[table.name] = {};
+                    //setting getter instance of object as new CreateModel instance
+                    Object.defineProperty(self.models, table.name, {
+                        get: function () {
+                            return new CreateModel(table);
+                        }
+                    });
                 });
             }
 
             //private : function sets the fields(indexes) and keyPath field value of table
             function _setFields(fields, tableName) {
-                var j, field, keyPath, newFields;
+                var j, field, keyPath, newFields, fieldNames;
                 keyPath = false;
                 newFields = {};
                 newFields.other = [];
+                fieldNames = [];
 
                 //setting other fields and keyPath Field
                 for (j = fields.length - 1; j >= 0; j--) {
                     field = fields[j];
 
+                    //validating field properties
+                    if (typeof field.name !== 'string') {
+                        throw "Field/Index name must be of string type";
+                    }
+
+                    if (fieldNames.indexOf(field.name) !== -1) {
+                        throw "Field/Index name already exists";
+                    }
+
+                    //pusghing to feildNames to check further fields of tables
+                    fieldNames.push(field.name);
+
+                    //checking field for keyPath property
                     if (field.hasOwnProperty('keyPath')) {
                         if (field.keyPath === true) {
+
+                            //checking if keyPath has already being set
                             if (keyPath === true) {
                                 throw "Error multiple keyPath defined in table " + tableName;
                             }
-
+                            //setting keyPath as this field 
                             newFields.keyPathField = field.name;
-                            keyPath = true;
+                            keyPath = true; //setting keyPath flag as keyPath has been defined
+
                         } else {
+                            //adding field to other array stating them as indexes
                             newFields.other.push(field);
                         }
                     } else {
+                        //adding field to other array stating them as indexes
                         newFields.other.push(field);
                     }
                 }
 
-                //if no keyPath field was set then setting default as 'id'
+                //if no keyPath field was set then setting default as '_id'
                 if (!keyPath) {
-                    newFields.keyPathField = 'id';
+                    newFields.keyPathField = '_id';
                 }
 
                 return newFields;
@@ -1760,12 +1752,25 @@ function indexeddbProvider($windowProvider) {
 
             //private : function prepares tables for creating them db and to create models against them
             function _setTables() {
-                var i, table, fields;
-
+                var i, table, fields, tableNames;
+                tableNames = [];
                 //for each table
                 for (i = self.tables.length - 1; i >= 0; i--) {
 
                     table = self.tables[i];
+
+                    //validating table name type
+                    if (typeof table.name !== 'string') {
+                        throw "Table/ObjectStore name must be of string type";
+                    }
+
+                    if (tableNames.indexOf(table.name) !== -1) {
+                        throw "Repeated Table/ObjectStore name " + table.name;
+                    }
+
+                    //pusing to array to check further table names
+                    tableNames.push(table.name);
+
                     table.hasTimeStamp = false; //default timestamps value as false
 
                     //fetching fields data
@@ -1798,14 +1803,17 @@ function indexeddbProvider($windowProvider) {
             _setTables();
 
             self.open.then(function (event) {
+                var l, table;
                 //when database is being upgraded
                 if (event.type === "upgradeneeded") {
                     _createTables(event.target.result);
 
                 } else {
-                    self.tables.forEach(function (table) {
-                        self.models[table.name] = new CreateModel(table);
-                    });
+                    for (l = self.tables.length - 1; l >= 0; l--) {
+                        table = self.tables[l];
+                        _createModelInstance(event.target.result, table);
+
+                    }
                 }
                 qRes(self);
 
