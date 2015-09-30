@@ -37,8 +37,8 @@ gulp.task('dist:script', ['dist:clean'], function () {
         .pipe(sourcemaps.init())
         .pipe(uglify())
         .pipe(rename('angular-indexeddb.min.js'))
-        .pipe(sourcemaps.write('.'))
         .pipe(header(banner, { pkg : pkg } ))
+        .pipe(sourcemaps.write('.'))
         .pipe(gulp.dest(paths.dist))
         .on('error', gutil.log)
 });
