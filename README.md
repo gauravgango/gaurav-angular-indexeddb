@@ -28,6 +28,9 @@ In your module config function state your database name, version and table schem
     }
 ````
 
+###Dcumentation
+You can find documentation [here](http://github.com)
+
 ### TODO
 * Add example/demo with some basic database operations
 * Add quick start to readme
