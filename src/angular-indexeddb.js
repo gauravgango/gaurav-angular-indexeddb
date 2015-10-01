@@ -49,7 +49,131 @@ function indexeddbProvider($windowProvider) {
                     resolve(event);
                 };
             });
+        }
 
+        /**
+         * Class : Helper class with various helper functions
+         */
+        function DBHelper() {
+            var helper = this;
+            var helperObject = {};
+            helperObject.isDesc = false;
+
+            //function changes case of value if string type to lower or upper
+            helper.changeCase = function (value, toUpper, caseInsensitive) {
+                toUpper = (toUpper === undefined) ? false : toUpper;
+                if (caseInsensitive) {
+                    if (typeof value === 'string') {
+                        value = (toUpper === true) ? value.toUpperCase() : value.toLowerCase();
+                    }
+                }
+
+                return value;
+            };
+
+            //function checks for like functionality in record key value
+            helper.checkLikeString = function (recordKey, likeString, caseInsensitive) {
+                var key = angular.copy(recordKey);
+                key = key.toString();
+
+                //if case insensitive
+                if (caseInsensitive) {
+                    key = key.toLowerCase();
+                    return (key.match(likeString.toLowerCase()) !== null);
+                }
+
+                return (key.match(likeString) !== null);
+            };
+
+            /**
+             * The where in logic for the object store
+             * @param  {integer/string} result             [contains value to be checked against]
+             * @param  {array} whereInValues      [whereIn values to search for]
+             * @param  {boolean} useCaseInsensitive [override case sensitive search]
+             * @return {boolen}                    [true if exists in list]
+             */
+            helper.whereIn = function (result, whereInValues, caseInsensitive) {
+
+                caseInsensitive = (caseInsensitive === undefined) ? false : caseInsensitive;
+
+                //if case sensitive then checking throughout th database
+                if (caseInsensitive) {
+                    var resultKey, isInValue;
+                    isInValue = false;
+
+                    resultKey = helper.changeCase(result, false, true);
+
+                    //checking each where in value against the main result value both in lower case
+                    whereInValues.forEach(function (value) {
+                        var lowerValue = helper.changeCase(angular.copy(value), false, true);
+                        if (lowerValue === resultKey) {
+                            isInValue = true;
+                        }
+                    });
+
+                    return isInValue;
+                }
+
+                return (whereInValues.indexOf(result) !== -1);
+            };
+
+            helper.setOrderSettings = function (inValues, isNumber, isDesc) {
+                //setting wherein, wherenot in as values of is desc for sorting
+                if (isDesc) {
+                    helperObject.isDesc = true;
+                }
+
+                if (isNumber) {
+                    inValues = inValues.sort(helperObject._sortAsNumbers);
+
+                } else {
+                    inValues = (helperObject.isDesc) ? inValues.reverse() : inValues.sort();
+                }
+
+                helperObject.isDesc = false;
+                return inValues;
+            };
+
+            //sorting where in/ where not in as number
+            helper.sortAsNumbers = function (a, b) {
+
+                //if desc then returning b-a for descesding values
+                if (helperObject.isDesc) {
+                    return (b - a);
+                }
+
+                //returinng ascending values
+                return (a - b);
+            };
+
+            //function for where not in logic 
+            helper.whereNotIn = function (result, inValues, caseInsensitive) {
+                //case sensitive
+                if (caseInsensitive) {
+                    var resultKey = helper.changeCase(result, false, true);
+                    var exists = false;
+
+                    inValues.forEach(function (value) {
+                        var lowerValue = helper.changeCase(angular.copy(value), false, true);
+
+                        //checking if current value doesnt exist in inValues while caseInsensitive
+                        if (lowerValue === resultKey) {
+                            exists = true;
+                        }
+                    });
+
+                    if (!exists) {
+                        return true;
+                    }
+
+                } else {
+                    if (inValues.indexOf(result) === -1) {
+                        return true;
+                    }
+                }
+
+                return false;
+            };
         }
 
         /**
@@ -60,16 +184,21 @@ function indexeddbProvider($windowProvider) {
          */
         function CreateTables(name, version, tables, qRes, qRej) {
             CreateDB.apply(this, [name, version]);
+            this.helper = {};
+            DBHelper.apply(this.helper, []);
+
             var self = this;
             self.tables = tables || [];
             self.models = {};
 
-            function CreateModel(table) {
+            /**
+             * Class : class for maintaining builder functions of model
+             * @param {array} table [table to act against]
+             */
+            function CreateModelBuilder(table) {
                 var model = this;
-                var connection;
-                var transaction;
-                var objectStore;
 
+                //private : function sets the model default settings
                 function _defaultModelSettings() {
                     model.bound = null; //default bound value
                     model.index = null; //default index value
@@ -87,7 +216,376 @@ function indexeddbProvider($windowProvider) {
                     model.likeString = null; //default likeString data
                 }
 
+                function _setWithRelation(relations) {
+                    var withTables = Object.keys(relations);
+
+                    withTables.forEach(function (tableName) {
+                        //creating model for each instance
+                        var withTable = self.tables.find(function (exisitingTable) {
+                            return (exisitingTable.name === tableName);
+                        });
+
+                        model.withTables[tableName] = new CreateModelBuilder(withTable);
+                    });
+                }
+
                 _defaultModelSettings();
+
+                //function sets greater than value for index
+                model.gt = function (lower) {
+                    lower = self.helper.changeCase(lower, true, model.caseInsensitive);
+                    model.bound = self.keyRange.lowerBound(lower, true);
+                    return model;
+                };
+
+                //function sets greater than value for index including the value
+                model.gte = function (lower) {
+                    lower = self.helper.changeCase(lower, true, model.caseInsensitive);
+                    model.bound = self.keyRange.lowerBound(lower);
+                    return model;
+                };
+
+                //function sets less than value for index including the value
+                model.lte = function (upper) {
+                    upper = self.helper.changeCase(upper, false, model.caseInsensitive);
+                    model.bound = self.keyRange.upperBound(upper);
+                    return model;
+                };
+
+                //function sets less than value for index
+                model.lt = function (upper) {
+                    upper = self.helper.changeCase(upper, false, model.caseInsensitive);
+                    model.bound = self.keyRange.upperBound(upper, true);
+                    return model;
+                };
+
+                model.orderDesc = function (isDesc) {
+                    model.isDesc = false;
+                    model.traverse = 'next';
+
+                    if (isDesc === true) {
+                        model.isDesc = true;
+                        model.traverse = 'prev';
+                    }
+
+                    if (model.whereInValues !== null) {
+                        model.whereInValues = self.helper.setOrderSettings(model.whereInValues, model.isWhereNumber, model.isDesc);
+                    }
+
+                    if (model.whereNotInValues !== null) {
+                        model.whereNotInValues = self.helper.setOrderSettings(model.whereNotInValues, model.isWhereNumber, model.isDesc);
+                    }
+
+                    return model;
+                };
+
+                //selecting index to make searches upon
+                model.select = function (index) {
+                    if (index === table.fields.keyPathField) {
+                        return model;
+                    }
+                    model.index = index;
+                    return model;
+                };
+
+                //function sets equal value for index searching (not case sensitive)
+                model.equal = function (where) {
+                    model.bound = self.keyRange.only(where);
+                    return model;
+                };
+
+                //sets searches to case sensitive
+                model.setCaseInsensitive = function (value) {
+                    var lower, upper, incUpper, incLower;
+
+                    value = (value === undefined || value === true) ? true : false;
+                    model.caseInsensitive = value;
+
+                    //if model has been set to case insensitive and bound values are defined then
+                    if (model.caseInsensitive && model.bound !== null) {
+
+                        //case not of equal
+                        if (model.bound.lower !== model.bound.upper) {
+
+                            //setting bound values against case insensitive
+                            lower = self.helper.changeCase(angular.copy(model.bound.lower), true, true);
+                            incLower = (model.bound.lowerOpen === undefined) ? false : angular.copy(model.bound.lowerOpen);
+                            upper = self.helper.changeCase(angular.copy(model.bound.upper), false, true);
+                            incUpper = (model.bound.upperOpen === undefined) ? false : angular.copy(model.bound.upperOpen);
+
+                            //if lower bound is undefined then setting only upper bound
+                            if (model.bound.lower === undefined) {
+                                model.bound = self.keyRange.upperBound(upper, incUpper);
+
+                            } else if (model.bound.upper === undefined) {
+                                //if upper bound is undefined then setting only upper bound
+                                model.bound = self.keyRange.lowerBound(lower, incLower);
+
+                            } else {
+                                //else setting both bound values
+                                model.bound = self.keyRange.bound(lower, upper, incLower, incUpper);
+                            }
+
+                        }
+                    }
+
+                    return model;
+                };
+
+                //between function(not case sensitive)
+                model.between = function (lower, upper, incLower, incUpper) {
+                    incLower = (incLower !== undefined) ? false : incLower;
+                    incUpper = (incUpper !== undefined) ? false : incUpper;
+
+                    //checking if work to do is caseInsensitive
+                    if (model.caseInsensitive) {
+                        lower = self.helper.changeCase(lower, true, true);
+                        upper = self.helper.changeCase(upper, false, true);
+                    }
+
+                    model.bound = self.keyRange.bound(lower, upper, incLower, incUpper);
+                    return model;
+                };
+
+                //where in model function for setting whereInValues
+                model.whereIn = function (inValues, sortAsNumbers) {
+
+                    sortAsNumbers = (sortAsNumbers === true) ? true : false;
+                    model.whereInValues = inValues;
+
+                    model.isWhereNumber = sortAsNumbers; //setting whereIn as number type
+
+                    if (model.caseInsensitive) {
+                        model.whereInValues = self.helper.setOrderSettings(model.whereInValues, sortAsNumbers, model.isDesc);
+                    }
+
+                    return model;
+                };
+
+                //function sets where not in values for model
+                model.whereNotIn = function (notInValues, sortAsNumbers) {
+
+                    sortAsNumbers = (sortAsNumbers === true) ? true : false;
+                    model.whereNotInValues = notInValues;
+
+                    model.isWhereNumber = sortAsNumbers; //setting whereNotInValues as number type
+
+                    if (model.caseInsensitive) {
+                        model.whereNotInValues = self.helper.setOrderSettings(model.whereNotInValues, sortAsNumbers, model.isDesc);
+                    }
+
+                    return model;
+                };
+
+                //functions sets the filter for traversing
+                model.filter = function (filterFunction) {
+                    model.hasFilter = true;
+                    if (typeof filterFunction !== 'function') {
+                        throw "A function must be given as parameter for filter";
+                    }
+                    model.filterFunction = filterFunction;
+                    return model;
+                };
+
+                //function sets the like string search setting
+                model.like = function (likeString) {
+                    if (likeString === undefined) {
+                        throw "Invalid input given to like";
+                    }
+
+                    model.likeString = likeString.toString();
+                    return model;
+                };
+
+                //query builder for with relations
+                model.withRelations = function (relations) {
+                    if (typeof relations !== 'object') {
+                        throw "WithRelation must be at type of object";
+                    }
+
+                    model.hasWith = true;
+                    model.originalWithRelation = relations; //keeping a record of original relation data
+                    model.withRelation = _setWithRelation(relations); //setting objects for using with relations
+
+                    return model;
+                };
+            }
+
+            function CreateModel(table) {
+                CreateModelBuilder.apply(this, [table]);
+
+                var model = this;
+                var transaction;
+                var objectStore;
+                var withRealtionObject = {};
+
+                withRealtionObject.getRelationData = function (outcome, isFind, propertyName) {
+                    var _id;
+                    if (isFind) {
+                        _id = angular.copy(outcome[propertyName]);
+
+                        //if _id is undefined then
+                        if (_id === undefined) {
+                            return false;
+                        }
+
+                        //_id is not an array then
+                        if (_id.constructor !== Array) {
+                            _id = [_id];
+                        }
+                        _id = _id.sort();
+
+                        return _id;
+                    }
+
+                    _id = [];
+
+                    outcome.forEach(function (value) {
+                        if (value[propertyName] !== undefined) {
+                            value[propertyName].forEach(function (propertyValue) {
+                                if (_id.indexOf(propertyValue) === -1) {
+                                    _id.push(propertyValue);
+                                }
+                            });
+                        }
+                    });
+
+                    _id = _id.sort();
+
+                    if (_id.length === 0) {
+                        return false;
+                    }
+
+                    return _id;
+
+                };
+
+                withRealtionObject.setOutcome = function (outcome, withTableName, propertyName, relationsData, isFind) {
+                    var tableSchema = self.tables.find(function (tableObject) {
+                        return (tableObject.name === withTableName);
+                    });
+
+                    if (isFind) {
+                        outcome.Relations = outcome.Relations || {};
+                        outcome.Relations[withTableName] = [];
+                        relationsData.forEach(function (relationData) {
+                            if (outcome[propertyName].indexOf(relationData[tableSchema.fields.keyPathField]) > 0) {
+                                outcome.Relations[withTableName].push(relationData);
+                            }
+                        });
+                        return outcome;
+                    }
+
+                    outcome.forEach(function (outcomeData) {
+                        outcomeData.Relations = outcomeData.Relations || {};
+                        outcomeData.Relations[withTableName] = [];
+
+                        relationsData.forEach(function (relationData) {
+
+                            if (outcomeData[propertyName] === undefined) {
+                                return false;
+                            }
+
+                            if (outcomeData[propertyName].indexOf(relationData[tableSchema.fields.keyPathField]) >= 0) {
+                                outcomeData.Relations[withTableName].push(relationData);
+                            }
+                        });
+                    });
+                    return outcome;
+                };
+
+                /**
+                 * private : function calls relation tables and fetches their data
+                 * @param  {[type]}  resolve           [description]
+                 * @param  {[type]}  reject            [description]
+                 * @param  {array/object}  outcome           [contains main table record(s)]
+                 * @param  {object}  objectStoreTables [with tables in transaction mode]
+                 * @param  {Boolean} isFind            [true for find condition]
+                 */
+                withRealtionObject.getWithAllData = function (resolve, reject, outcome, objectStoreTables, isFind) {
+                    //setting default value for isFind
+                    isFind = (isFind === undefined) ? false : isFind;
+
+                    var _id, withTablesCount, relationNames;
+
+                    relationNames = Object.keys(objectStoreTables); //getting relational table names
+                    withTablesCount = relationNames.length;
+
+                    var currentCount = 0;
+
+                    //for each relational table
+                    relationNames.forEach(function (withTableName) {
+
+                        //retrieving realtion values from main table
+                        _id = withRealtionObject.getRelationData(outcome, isFind, model.originalWithRelation[withTableName].field);
+
+                        //if main table has no relation values then setting Relation status that relational table as empty array
+                        if (_id === false) {
+                            outcome = withRealtionObject.setOutcome(outcome, withTableName, model.originalWithRelation[withTableName].field, [], isFind);
+                            currentCount = currentCount + 1;
+
+                            if (currentCount === withTablesCount) {
+                                resolve(outcome);
+                            }
+                            return false;
+                        }
+
+                        var currentOutcome = [];
+                        var hasFilter = false;
+
+                        //if filter was set in relation then setting hasFilter flag
+                        if (typeof model.originalWithRelation[withTableName].filter === 'function') {
+                            hasFilter = true;
+                        }
+
+                        //opening relational table and fetching data
+                        objectStoreTables[withTableName].openCursor(self.keyRange.bound(_id[0], _id[(_id.length - 1)])).onsuccess = function (event) {
+                            try {
+
+                                var cursor = event.target.result;
+                                if (cursor) {
+
+                                    //if relation has filter
+                                    if (hasFilter) {
+                                        if (model.originalWithRelation[withTableName].filter(cursor.value) !== true) {
+                                            cursor.continue();
+                                            return false;
+                                        }
+                                    }
+
+                                    if (!self.helper.whereIn(cursor.key, _id, false)) {
+                                        cursor.continue();
+                                        return false;
+                                    }
+
+                                    currentOutcome.push(cursor.value);
+                                    cursor.continue();
+
+                                } else {
+                                    //when traversing is done
+                                    outcome = withRealtionObject.setOutcome(outcome, withTableName, model.originalWithRelation[withTableName].field, currentOutcome, isFind);
+
+                                    currentCount = currentCount + 1;
+
+                                    //when all of the relation tables have completed traversing then resolving
+                                    if (currentCount === withTablesCount) {
+                                        resolve(outcome);
+                                    }
+                                }
+                            } catch (exception) {
+                                transaction.abort();
+                                reject(exception);
+                            }
+                        };
+
+                        //case or error of in relation object store
+                        objectStoreTables[withTableName].openCursor(self.keyRange.bound(_id[0], _id[(_id.length - 1)])).onerror = function (e) {
+                            transaction.abort();
+                            reject(e);
+                        };
+                    });
+
+                };
 
                 //private : function returns array of table names to perform transaction on
                 function _getTransactionTables() {
@@ -107,22 +605,6 @@ function indexeddbProvider($windowProvider) {
                     return transactionTables;
                 }
 
-                //private function checks for like functionality in record key value
-                function _checkLikeString(recordKey) {
-                    var key = angular.copy(recordKey);
-                    key = key.toString();
-
-                    //if case insensitive
-                    if (model.caseInsensitive) {
-                        key = key.toLowerCase();
-                        return (key.match(model.likeString.toLowerCase()) !== null);
-                    }
-
-                    return (key.match(model.likeString) !== null);
-
-
-                }
-
                 //private : wrapper for calling default getAll with callback for success
                 function _get(callback, readwrite) {
 
@@ -133,10 +615,8 @@ function indexeddbProvider($windowProvider) {
                     var relations = {};
 
                     return $q(function (resolve, reject) {
-                        try {
-                            connection = self.indexdb.open(self.name);
-                            connection.onsuccess = function (event) {
-
+                        self.open.then(function (event) {
+                            try {
                                 var db = event.target.result;
                                 //opening transaction
                                 transactionTables = _getTransactionTables();
@@ -166,102 +646,28 @@ function indexeddbProvider($windowProvider) {
                                         callback(event, resolve, reject, relations);
 
                                     } catch (exception) {
+                                        transaction.abort();
                                         reject(exception);
                                     }
                                 };
 
                                 objectStore.onerror = function (error) {
+                                    transaction.abort();
                                     reject(error);
                                 };
 
                                 transaction.onerror = function (error) {
                                     reject(error);
                                 };
-                            };
 
-                            connection.onerror = function (error) {
-                                reject(error);
-                            };
+                            } catch (exception) {
+                                reject(exception);
+                            }
 
-                        } catch (exception) {
-                            reject(exception);
-                        }
+                        }).catch(function (error) {
+                            reject(error);
+                        });
                     });
-                }
-
-                //private : function changes case of value if string type to lower or upper
-                function _changeCase(value, toUpper) {
-                    toUpper = (toUpper === undefined) ? false : toUpper;
-                    if (model.caseInsensitive) {
-                        if (typeof value === 'string') {
-                            value = (toUpper === true) ? value.toUpperCase() : value.toLowerCase();
-                        }
-                    }
-
-                    return value;
-                }
-
-                //private : function for where not in logic
-                function _whereNotIn(result, outcome, notInCaseInsensitiveArray) {
-                    //case sensitive
-                    if (model.caseInsensitive) {
-                        var resultKey = _changeCase(result.key);
-                        model.whereNotInValues.forEach(function (value) {
-                            var lowerValue = _changeCase(angular.copy(value));
-                            if (lowerValue === resultKey && notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
-                                notInCaseInsensitiveArray.push(resultKey);
-                            }
-                        });
-
-                        if (notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
-                            outcome.push(result.value);
-                        }
-
-                    } else {
-                        if (model.whereNotInValues.indexOf(result.key) === -1) {
-                            outcome.push(result.value);
-                        }
-                    }
-
-                    result.continue(null, model.traverse);
-                }
-
-                /**
-                 * The where in logic for the object store
-                 * @param  {IDBCursor} result             [contains current cursor value]
-                 * @param  {array} outcome            [contains final result where if condition passed data will be pushed]
-                 * @param  {array} whereInValues      [whereIn values to search for]
-                 * @param  {boolean} useCaseInsensitive [override case sensitive search]
-                 * @return {integer}                    [returns new count value of next cursor]
-                 */
-                function _whereIn(result, outcome, whereInValues, useCaseInsensitive) {
-
-                    useCaseInsensitive = (useCaseInsensitive === undefined) ? true : useCaseInsensitive;
-
-                    //if case sensitive then checking throughout th database
-                    if (model.caseInsensitive && useCaseInsensitive) {
-                        var resultKey;
-                        resultKey = _changeCase(result.key);
-
-                        whereInValues.forEach(function (value) {
-                            var lowerValue = _changeCase(angular.copy(value));
-                            if (lowerValue === resultKey) {
-                                outcome.push(result.value);
-                            }
-                        });
-
-                        result.continue();
-                        return 0;
-                    }
-
-                    if (whereInValues.indexOf(result.key) === -1) {
-                        result.continue();
-                        return;
-                    }
-
-                    //pushing to outcome array
-                    outcome.push(result.value);
-                    result.continue();
                 }
 
                 //private : function returns new object value to be updated with timestamps
@@ -287,7 +693,7 @@ function indexeddbProvider($windowProvider) {
                 }
 
                 //private : function updates the relations indexes by adding new values
-                function _updateWithRelation(record, data) {
+                withRealtionObject.update = function (record, data) {
                     //retrievinging properties to be updated
                     var properties = Object.keys(data);
 
@@ -315,315 +721,7 @@ function indexeddbProvider($windowProvider) {
                     });
 
                     return record;
-                }
-
-                //private : where in logic for update condition. When condition passes the system updates the object in current location
-                function _whereInUpdate(result, data) {
-                    var toUpdate = false;
-                    var newValue;
-
-                    //if case sensitive then checking throughout th database
-                    if (model.caseInsensitive) {
-                        var resultKey;
-                        resultKey = _changeCase(result.key);
-                        model.whereInValues.forEach(function (value) {
-                            var lowerValue = _changeCase(angular.copy(value));
-                            if (lowerValue === resultKey) {
-                                toUpdate = true;
-                            }
-                        });
-
-                        if (toUpdate) {
-                            newValue = _updateValue(result.value, data);
-
-                            //setting with relation data to the record as well
-                            if (model.hasWith) {
-                                newValue = _updateWithRelation(newValue, model.originalWithRelation);
-                            }
-                            result.update(newValue);
-                        }
-
-                        result.continue();
-                        return;
-                    }
-
-                    if (model.whereInValues.indexOf(result.key) === -1) {
-                        result.continue();
-                        return;
-                    }
-
-                    newValue = _updateValue(result.value, data);
-                    //setting with relation data to the record as well
-                    if (model.hasWith) {
-                        newValue = _updateWithRelation(newValue, model.originalWithRelation);
-                    }
-                    //pushing to outcome array
-                    result.update(newValue);
-                    result.continue();
-                }
-
-                //private : function for where not in logic for update scenario
-                function _whereNotInUpdate(result, notInCaseInsensitiveArray, data) {
-
-                    var newValue;
-
-                    //case sensitive
-                    if (model.caseInsensitive) {
-                        var resultKey = _changeCase(result.key);
-                        model.whereNotInValues.forEach(function (value) {
-                            var lowerValue = _changeCase(angular.copy(value));
-                            if (lowerValue === resultKey && notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
-                                notInCaseInsensitiveArray.push(resultKey);
-                            }
-                        });
-
-                        if (notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
-                            newValue = _updateValue(result.value, data); //data to be updated
-
-                            //setting with relation data to the record as well
-                            if (model.hasWith) {
-                                newValue = _updateWithRelation(newValue, model.originalWithRelation);
-                            }
-                            result.update(newValue);
-                        }
-
-                    } else {
-                        if (model.whereNotInValues.indexOf(result.key) === -1) {
-                            newValue = _updateValue(result.value, data); //data to be updated
-
-                            //setting with relation data to the record as well
-                            if (model.hasWith) {
-                                newValue = _updateWithRelation(newValue, model.originalWithRelation);
-                            }
-                            result.update(newValue);
-                        }
-                    }
-
-                    result.continue();
-                }
-
-
-                //private : where in logic for deleting object
-                function _whereInDestroy(result, deletedIds) {
-                    var toDelete = false;
-
-                    //if case sensitive then checking throughout th database
-                    if (model.caseInsensitive) {
-                        var resultKey;
-                        resultKey = _changeCase(result.key);
-                        model.whereInValues.forEach(function (value) {
-                            var lowerValue = _changeCase(angular.copy(value));
-                            if (lowerValue === resultKey) {
-                                toDelete = true;
-                            }
-                        });
-
-                        //if to delete is set then deleting
-                        if (toDelete) {
-                            deletedIds.push(result.value[table.fields.keyPathField]);
-                            result.delete();
-                        }
-                        result.continue();
-                        return;
-                    }
-
-                    if (model.whereInValues.indexOf(result.key) === -1) {
-                        result.continue();
-                        return;
-                    }
-
-                    deletedIds.push(result.value[table.fields.keyPathField]);
-
-                    //pushing to outcome array
-                    result.delete();
-                    result.continue();
-                    return;
-                }
-
-                //private : where not in logic for deleting
-                function _wherNotInDestroy(result, notInCaseInsensitiveArray, deletedIds) {
-                    //case sensitive
-                    if (model.caseInsensitive) {
-                        var resultKey = _changeCase(result.key);
-                        model.whereNotInValues.forEach(function (value) {
-                            var lowerValue = _changeCase(angular.copy(value));
-                            if (lowerValue === resultKey && notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
-                                notInCaseInsensitiveArray.push(resultKey);
-                            }
-                        });
-
-                        if (notInCaseInsensitiveArray.indexOf(resultKey) === -1) {
-                            deletedIds.push(result.value[table.fields.keyPathField]);
-                            result.delete();
-                        }
-
-                    } else {
-                        if (model.whereNotInValues.indexOf(result.key) === -1) {
-                            deletedIds.push(result.value[table.fields.keyPathField]);
-                            result.delete();
-                        }
-                    }
-
-                    result.continue();
-                }
-
-
-                //private : function calls relation tables and fetches their data
-                /**
-                 * private : function calls relation tables and fetches their data
-                 * @param  {[type]}  resolve           [description]
-                 * @param  {[type]}  reject            [description]
-                 * @param  {array/object}  outcome           [contains main table record(s)]
-                 * @param  {object}  objectStoreTables [with tables in transaction mode]
-                 * @param  {Boolean} isFind            [true for find condition]
-                 */
-                function _getWithAllData(resolve, reject, outcome, objectStoreTables, isFind) {
-
-                    //setting default value for isFind
-                    isFind = (isFind === undefined) ? false : isFind;
-
-                    //checking if outcome is not empty
-                    if (isFind) {
-                        if (outcome === undefined) {
-                            resolve(outcome);
-                            return;
-                        }
-
-                    } else {
-                        if (outcome.length === 0) {
-                            resolve(outcome);
-                            return;
-                        }
-                    }
-                    var _id, withTablesCount, relationNames, Relations;
-
-                    Relations = {};
-
-                    relationNames = Object.keys(objectStoreTables); //getting relational table names
-                    withTablesCount = relationNames.length;
-
-                    var currentCount = 0;
-
-                    _id = [];
-
-                    //for each relational table
-                    relationNames.forEach(function (withTableName) {
-
-                        //retrieving main relationship join data
-                        if (isFind) {
-                            _id = angular.copy(outcome[model.originalWithRelation[withTableName].field]);
-
-                        } else {
-                            outcome.forEach(function (record) {
-                                var d = angular.copy(record[model.originalWithRelation[withTableName].field]);
-                                if (d !== undefined && d.constructor === Array) {
-                                    d.forEach(function (id) {
-                                        if (_id.indexOf(id) === -1) {
-                                            _id.push(id);
-                                        }
-                                    });
-                                }
-                            });
-                            Relations[withTableName] = [];
-                        }
-
-                        var currentOutcome = [];
-                        var hasFilter = false;
-
-                        //if filter was set in relation then setting hasFilter flag
-                        if (typeof model.originalWithRelation[withTableName].filter === 'function') {
-                            hasFilter = true;
-                        }
-                        if (_id === undefined || _id.constructor !== Array) {
-                            resolve(outcome);
-                        }
-
-                        _id = _id.sort();
-
-                        if (_id.length === 0) {
-
-                            if (isFind) {
-                                outcome.Relations = Relations;
-                            } else {
-                                outcome.forEach(function (record) {
-                                    record.Relations = Relations;
-                                });
-                            }
-                            resolve(outcome);
-                            return;
-                        }
-                        //opening relational table and fetching data
-                        objectStoreTables[withTableName].openCursor(self.keyRange.bound(_id[0], _id[(_id.length - 1)])).onsuccess = function (event) {
-                            try {
-
-                                var cursor = event.target.result;
-                                if (cursor) {
-
-                                    //if relation has filter
-                                    if (hasFilter) {
-
-                                        if (model.originalWithRelation[withTableName].filter(cursor.value) !== true) {
-                                            cursor.continue();
-                                            return;
-                                        }
-                                    }
-
-                                    _whereIn(cursor, currentOutcome, _id, false);
-
-                                } else {
-                                    //when traversing is done
-
-                                    if (isFind) {
-                                        //setting relation object to main outcome
-                                        outcome.Relations = outcome.Relations || {};
-                                        outcome.Relations[withTableName] = [];
-
-                                        //adding those with relation records which have relation with current record
-                                        currentOutcome.forEach(function (currentRecord) {
-                                            //adding the records to the main table
-                                            if (outcome[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
-                                                outcome.Relations[withTableName].push(currentRecord);
-                                            }
-                                        });
-
-
-                                    } else {
-                                        outcome.forEach(function (record) {
-                                            //setting relation object to main outcome
-                                            record.Relations = record.Relations || {};
-                                            record.Relations[withTableName] = [];
-
-                                            //adding those with relation records which have relation with current record
-                                            currentOutcome.forEach(function (currentRecord) {
-                                                //adding the records to the main table
-                                                if (record[model.originalWithRelation[withTableName].field] !== undefined) {
-                                                    if (record[model.originalWithRelation[withTableName].field].indexOf(currentRecord._id) !== -1) {
-                                                        record.Relations[withTableName].push(currentRecord);
-                                                    }
-                                                }
-                                            });
-                                        });
-                                    }
-
-                                    currentCount = currentCount + 1;
-
-                                    //when all of the relation tables have completed traversing then resolving
-                                    if (currentCount === withTablesCount) {
-                                        resolve(outcome);
-                                    }
-                                }
-                            } catch (exception) {
-                                reject(exception);
-                            }
-                        };
-
-                        //case or error of in relation object store
-                        objectStoreTables[withTableName].openCursor(self.keyRange.bound(_id[0], _id[(_id.length - 1)])).onerror = function (e) {
-                            reject(e);
-                        };
-                    });
-
-                }
+                };
 
                 /**
                  * private : function adds relation id to related tables. If many relation is set then also adds the relation tables record ids to the main table for creating many to many
@@ -713,6 +811,7 @@ function indexeddbProvider($windowProvider) {
                                         };
 
                                         newObjectStore.onerror = function (error) {
+                                            transaction.abort();
                                             reject(error);
                                         };
 
@@ -724,6 +823,7 @@ function indexeddbProvider($windowProvider) {
                         };
 
                         objectStoreTables[withTableName].openCursor().onerror = function (error) {
+                            transaction.abort();
                             reject(error);
                         };
                     });
@@ -799,221 +899,87 @@ function indexeddbProvider($windowProvider) {
                                     }
                                 }
                             } catch (exception) {
+                                transaction.abort();
                                 reject(exception);
                             }
 
                         };
 
                         objectStoreTables[withTableName].onerror = function (error) {
+                            transaction.abort();
                             reject(error);
                         };
                     });
                 }
 
-
-                /**
-                 * Function sets the with relations by creating new model instances
-                 * @param {object} relations [contains with relations data]
-                 */
-                function _setWithRelation(relations) {
-                    var withTables = Object.keys(relations);
-
-                    withTables.forEach(function (tableName) {
-                        //creating model for each instance
-                        model.withTables[tableName] = new CreateModel(tableName);
-                    });
-                }
-
-                //sorting where in/ where not in as number
-                function _sortAsNumbers(a, b) {
-
-                    //if desc then returning b-a for descesding values
-                    if (model.isDesc) {
-                        return (b - a);
-                    }
-
-                    //returinng ascending values
-                    return (a - b);
-                }
-
-                function _setOrderSettings() {
-                    //setting wherein, wherenot in as values of is desc for sorting
-                    if (model.isDesc) {
-                        //case for descending order
-                        //if whereInValues are defined
-                        if (model.whereInValues !== null) {
-                            if (model.isWhereNumber) {
-                                model.whereInValues = model.whereInValues.sort(_sortAsNumbers);
-                                return;
-                            }
-
-                            model.whereInValues = model.whereInValues.reverse();
-                        }
-                        //if whereNotInValues are defined
-                        if (model.whereNotInValues !== null) {
-                            if (model.isWhereNumber) {
-                                model.whereNotInValues = model.whereNotInValues.sort(_sortAsNumbers);
-                                return;
-                            }
-
-                            model.whereNotInValues = model.whereNotInValues.reverse();
-                        }
-                    } else {
-                        //case for ascending order
-                        //if whereInValues are defined
-                        if (model.whereInValues !== null) {
-                            if (model.isWhereNumber) {
-                                model.whereInValues = model.whereInValues.sort(_sortAsNumbers);
-                                return;
-                            }
-
-                            model.whereInValues = model.whereInValues.sort();
-                        }
-                        //if whereNotInValues are defined
-                        if (model.whereNotInValues !== null) {
-                            if (model.isWhereNumber) {
-                                model.whereNotInValues = model.whereNotInValues.sort(_sortAsNumbers);
-                                return;
-                            }
-
-                            model.whereNotInValues = model.whereNotInValues.sort();
-
-                        }
-                    }
-                }
-
-                model.orderDesc = function (isDesc) {
-                    if (isDesc === true) {
-                        model.isDesc = true;
-                        model.traverse = 'prev';
-                        _setOrderSettings();
-
-                    } else {
-                        model.isDesc = false;
-                        model.traverse = 'next';
-                        _setOrderSettings();
-                    }
-
-                    return model;
-                };
-
-                //selecting index to make searches upon
-                model.select = function (index) {
-                    if (index === table.fields.keyPathField) {
-                        return model;
-                    }
-                    model.index = index;
-                    return model;
-                };
-
-                //function sets equal value for index searching (not case sensitive)
-                model.equal = function (where) {
-                    model.bound = self.keyRange.only(where);
-                    return model;
-                };
-
-                //sets searches to case sensitive
-                model.setCaseInsensitive = function (value) {
-                    var lower, upper, incUpper, incLower;
-
-                    value = (value === undefined || value === true) ? true : false;
-                    model.caseInsensitive = value;
-
-                    //if model has been set to case insensitive and bound values are defined then
-                    if (model.caseInsensitive && model.bound !== null) {
-
-                        //case not of equal
-                        if (model.bound.lower !== model.bound.upper) {
-
-                            //setting bound values against case insensitive
-                            lower = _changeCase(angular.copy(model.bound.lower), true);
-                            incLower = (model.bound.lowerOpen === undefined) ? false : angular.copy(model.bound.lowerOpen);
-                            upper = _changeCase(angular.copy(model.bound.upper));
-                            incUpper = (model.bound.upperOpen === undefined) ? false : angular.copy(model.bound.upperOpen);
-
-                            //if lower bound is undefined then setting only upper bound
-                            if (model.bound.lower === undefined) {
-                                model.bound = self.keyRange.upperBound(upper, incUpper);
-
-                            } else if (model.bound.upper === undefined) {
-                                //if upper bound is undefined then setting only upper bound
-                                model.bound = self.keyRange.lowerBound(lower, incLower);
-
-                            } else {
-                                //else setting both bound values
-                                model.bound = self.keyRange.bound(lower, upper, incLower, incUpper);
-                            }
-
-                        }
-                    }
-
-                    return model;
-                };
-
                 //finds a single record according to value set (not case sensitive)
                 model.find = function () {
 
                     var getId = $q(function (resolve, reject) {
-                        var transactionTables = [];
-                        var relations = {};
-                        try {
+                        self.open.then(function (event) {
+                            var transactionTables = [];
+                            var relations = {};
 
-                            connection = self.indexdb.open(self.name);
-                            connection.onsuccess = function (event) {
-                                try {
-                                    var db = event.target.result;
+                            try {
+                                var db = event.target.result;
 
-                                    transactionTables = _getTransactionTables();
-                                    transaction = db.transaction(transactionTables);
+                                transactionTables = _getTransactionTables();
+                                transaction = db.transaction(transactionTables);
 
-                                    if (model.hasWith) {
-                                        transactionTables.splice(0, 1);
-                                        transactionTables.forEach(function (withTableName) {
-                                            relations[withTableName] = transaction.objectStore(withTableName);
-                                        });
-                                    }
-
-                                    objectStore = transaction.objectStore(table.name);
-
-                                    //if index is set then searching on the index
-                                    if (model.index !== null) {
-                                        objectStore = objectStore.index(model.index);
-                                    }
-
-                                    objectStore = objectStore.get(model.bound);
-                                    objectStore.onsuccess = function (record) {
-                                        try {
-
-                                            if (model.hasWith) {
-                                                _getWithAllData(resolve, reject, record.target.result, relations, true);
-
-                                            } else {
-                                                resolve(record.target.result);
-                                            }
-                                        } catch (exception) {
-                                            reject(exception);
-                                        }
-                                    };
-
-                                    objectStore.onerror = function (error) {
-                                        reject(error);
-                                    };
-
-                                    transaction.onerror = function (error) {
-                                        reject(error);
-                                    };
-
-                                } catch (exception) {
-                                    reject(exception);
+                                if (model.hasWith) {
+                                    transactionTables.splice(0, 1);
+                                    transactionTables.forEach(function (withTableName) {
+                                        relations[withTableName] = transaction.objectStore(withTableName);
+                                    });
                                 }
-                            };
 
-                            connection.onerror = function (error) {
-                                reject(error);
-                            };
-                        } catch (exception) {
-                            reject(exception);
-                        }
+                                objectStore = transaction.objectStore(table.name);
+
+                                //if index is set then searching on the index
+                                if (model.index !== null) {
+                                    objectStore = objectStore.index(model.index);
+                                }
+
+                                objectStore = objectStore.get(model.bound);
+                                objectStore.onsuccess = function (record) {
+                                    try {
+                                        //if no record was found then resolving
+                                        if (record === undefined) {
+                                            resolve(record);
+                                            return false;
+                                        }
+
+                                        //if with relationship was defined then
+                                        if (model.hasWith) {
+                                            withRealtionObject.getWithAllData(resolve, reject, record.target.result, relations, true);
+                                            return false;
+                                        }
+
+                                        resolve(record.target.result);
+
+                                    } catch (exception) {
+                                        transaction.abort();
+                                        reject(exception);
+                                    }
+                                };
+
+                                objectStore.onerror = function (error) {
+                                    transaction.abort();
+                                    reject(error);
+                                };
+
+                                transaction.onerror = function (error) {
+                                    reject(error);
+                                };
+
+                            } catch (exception) {
+                                reject(exception);
+                            }
+
+
+                        }).catch(function (error) {
+                            reject(error);
+                        });
 
                     });
 
@@ -1024,70 +990,67 @@ function indexeddbProvider($windowProvider) {
                 model.add = function (data) {
 
                     var add = $q(function (resolve, reject) {
-                        try {
-
+                        self.open.then(function (event) {
                             var transactionTables = [];
                             var relations = {};
 
-                            connection = self.indexdb.open(self.name);
-                            connection.onsuccess = function (event) {
-                                try {
-                                    var db = event.target.result;
+                            try {
+                                var db = event.target.result;
 
-                                    transactionTables = _getTransactionTables();
-                                    transaction = db.transaction(transactionTables, "readwrite");
+                                transactionTables = _getTransactionTables();
+                                transaction = db.transaction(transactionTables, "readwrite");
 
-                                    if (model.hasWith) {
-                                        transactionTables.splice(0, 1);
-                                        transactionTables.forEach(function (withTableName) {
-                                            relations[withTableName] = transaction.objectStore(withTableName);
-                                        });
-                                    }
-
-                                    objectStore = transaction.objectStore(table.name);
-                                    if (table.hasTimeStamp) {
-                                        data.updatedAt = Date.parse(Date());
-                                        data.createdAt = Date.parse(Date());
-                                    }
-                                    objectStore = objectStore.add(data);
-
-                                    objectStore.onsuccess = function (event) {
-                                        try {
-                                            var result;
-                                            result = data;
-
-                                            //adding key path value to the data object after adding
-                                            result[table.fields.keyPathField] = event.target.result;
-
-                                            if (model.hasWith) {
-                                                _addWithData(resolve, reject, result, relations, transaction);
-                                            } else {
-                                                resolve(result);
-
-                                            }
-
-                                        } catch (exception) {
-                                            reject(exception);
-                                        }
-
-                                    };
-
-                                    transaction.onerror = function (event) {
-                                        reject(event.srcElement.error);
-                                    };
-                                } catch (exception) {
-                                    reject(exception);
+                                if (model.hasWith) {
+                                    transactionTables.splice(0, 1);
+                                    transactionTables.forEach(function (withTableName) {
+                                        relations[withTableName] = transaction.objectStore(withTableName);
+                                    });
                                 }
 
+                                objectStore = transaction.objectStore(table.name);
+                                if (table.hasTimeStamp) {
+                                    data.updatedAt = Date.parse(Date());
+                                    data.createdAt = Date.parse(Date());
+                                }
+                                objectStore = objectStore.add(data);
 
-                            };
+                                objectStore.onsuccess = function (event) {
+                                    try {
+                                        var result;
+                                        result = data;
 
-                            connection.onerror = function (error) {
-                                reject(error);
-                            };
-                        } catch (exception) {
-                            reject(exception);
-                        }
+                                        //adding key path value to the data object after adding
+                                        result[table.fields.keyPathField] = event.target.result;
+
+                                        if (model.hasWith) {
+                                            _addWithData(resolve, reject, result, relations, transaction);
+                                        } else {
+                                            resolve(result);
+
+                                        }
+
+                                    } catch (exception) {
+                                        transaction.abort();
+                                        reject(exception);
+                                    }
+
+                                };
+
+                                objectStore.onerror = function (error) {
+                                    transaction.abort();
+                                    reject(error);
+                                };
+
+                                transaction.onerror = function (event) {
+                                    reject(event.srcElement.error);
+                                };
+                            } catch (exception) {
+                                reject(exception);
+                            }
+
+                        }).catch(function (error) {
+                            reject(error);
+                        });
                     });
 
                     return add;
@@ -1100,199 +1063,139 @@ function indexeddbProvider($windowProvider) {
                     var inserted = 0; //no of records inserted
 
                     var add = $q(function (resolve, reject) {
-                        try {
-                            connection = self.indexdb.open(self.name);
-                            connection.onsuccess = function (event) {
+
+                        self.open.then(function (event) {
+                            try {
+
+                                var db = event.target.result;
+                                transaction = db.transaction([table.name], "readwrite");
+
                                 try {
 
-                                    var db = event.target.result;
-                                    transaction = db.transaction([table.name], "readwrite");
+                                    objectStore = transaction.objectStore(table.name);
+                                    //for each record
+                                    data.forEach(function (toAddData) {
 
-                                    try {
+                                        //adding time stamps if allowed
+                                        if (table.hasTimeStamp) {
+                                            toAddData.updatedAt = Date.parse(Date());
+                                            toAddData.createdAt = Date.parse(Date());
+                                        }
 
-                                        objectStore = transaction.objectStore(table.name);
-                                        //for each record
-                                        data.forEach(function (toAddData) {
+                                        //single add instance
+                                        objectStore.add(toAddData).onsuccess = function (event) {
+                                            try {
+                                                var result;
+                                                result = data[inserted];
 
-                                            //adding time stamps if allowed
-                                            if (table.hasTimeStamp) {
-                                                toAddData.updatedAt = Date.parse(Date());
-                                                toAddData.createdAt = Date.parse(Date());
+                                                //adding newly inserted key path value to the object
+                                                result[table.fields.keyPathField] = event.target.result;
+
+                                                outcome.push(result);
+                                                inserted = inserted + 1;
+
+                                                //if inserted count is equal to total no of records then resolving
+                                                if (inserted === count) {
+                                                    resolve(outcome);
+                                                }
+                                            } catch (exception) {
+                                                transaction.abort();
+                                                reject(exception);
                                             }
 
-                                            //single add instance
-                                            objectStore.add(toAddData).onsuccess = function (event) {
-                                                try {
-                                                    var result;
-                                                    result = data[inserted];
+                                        };
+                                    });
 
-                                                    //adding newly inserted key path value to the object
-                                                    result[table.fields.keyPathField] = event.target.result;
-
-                                                    outcome.push(result);
-                                                    inserted = inserted + 1;
-
-                                                    //if inserted count is equal to total no of records then resolving
-                                                    if (inserted === count) {
-                                                        resolve(outcome);
-                                                    }
-                                                } catch (exception) {
-                                                    reject(exception);
-                                                }
-
-                                            };
-                                        });
-
-                                    } catch (exception) {
-                                        reject(exception);
-                                        return;
-                                    }
-
-
-                                    transaction.onerror = function (event) {
-                                        reject(event.srcElement.error);
-                                    };
                                 } catch (exception) {
+                                    transaction.abort();
                                     reject(exception);
+                                    return;
                                 }
 
-                            };
 
-                            connection.onerror = function (event) {
+                                transaction.onerror = function (event) {
+                                    reject(event.srcElement.error);
+                                };
+                            } catch (exception) {
+                                reject(exception);
+                            }
 
-                                reject(event.srcElement.error);
-                            };
-
-                        } catch (exception) {
-                            reject(exception);
-                        }
+                        }).catch(function (error) {
+                            reject(error);
+                        });
 
                     });
 
                     return add;
                 };
 
-                //between function(not case sensitive)
-                model.between = function (lower, upper, incLower, incUpper) {
-                    incLower = (incLower !== undefined) ? false : incLower;
-                    incUpper = (incUpper !== undefined) ? false : incUpper;
-                    model.bound = self.keyRange.bound(lower, upper, incLower, incUpper);
-                    return model;
-                };
-
-                //where in model function for setting whereInValues
-                model.whereIn = function (inValues, sortAsNumbers) {
-
-                    sortAsNumbers = (sortAsNumbers === true) ? true : false;
-                    model.whereInValues = inValues;
-
-                    model.isWhereNumber = sortAsNumbers; //setting whereIn as number type
-
-                    _setOrderSettings(); //sorting whereInValues as order type
-
-                    return model;
-                };
-
-                //function sets greater than value for index
-                model.gt = function (lower) {
-                    lower = _changeCase(lower, true);
-                    model.bound = self.keyRange.lowerBound(lower, true);
-                    return model;
-                };
-
-                //function sets greater than value for index including the value
-                model.gte = function (lower) {
-                    lower = _changeCase(lower, true);
-                    model.bound = self.keyRange.lowerBound(lower);
-                    return model;
-                };
-
-                //function sets less than value for index including the value
-                model.lte = function (upper) {
-                    upper = _changeCase(upper);
-                    model.bound = self.keyRange.upperBound(upper);
-                    return model;
-                };
-
-                //function sets less than value for index
-                model.lt = function (upper) {
-                    upper = _changeCase(upper);
-                    model.bound = self.keyRange.upperBound(upper, true);
-                    return model;
-                };
-
                 //function is default getAll function retrieves all data
                 model.getAll = function () {
                     var outcome = [];
-                    var notInCaseInsensitiveArray = [];
 
                     var getId = _get(function (event, resolve, reject, withTables) {
                         var result = event.target.result;
 
                         if (result) {
-
                             //if model has filter
                             if (model.hasFilter) {
                                 if (model.filterFunction(result.value) !== true) {
                                     result.continue();
-                                    return;
+                                    return false;
                                 }
                             }
 
                             //checking for likeness in data
                             if (model.likeString !== null) {
-                                if (_checkLikeString(result.key) === false) {
+                                if (self.helper.checkLikeString(result.key, model.likeString, model.caseInsensitive) === false) {
                                     result.continue();
-                                    return;
+                                    return false;
                                 }
                             }
 
                             //first checking if model has whereInValues then where not else default getAll
                             if (model.whereInValues !== null) {
-                                _whereIn(result, outcome, model.whereInValues);
-
-                            } else if (model.whereNotInValues !== null) {
-                                _whereNotIn(result, outcome, notInCaseInsensitiveArray);
-
-                            } else {
-                                outcome.push(result.value);
-                                result.continue();
+                                if (!self.helper.whereIn(result.key, model.whereInValues, model.caseInsensitive)) {
+                                    result.continue();
+                                    return false;
+                                }
                             }
 
+                            if (model.whereNotInValues !== null) {
+                                if (!self.helper.whereNotIn(result.key, model.whereNotInValues, model.caseInsensitive)) {
+                                    result.continue();
+                                    return false;
+                                }
+                            }
+
+                            outcome.push(result.value);
+                            result.continue();
+
+
                         } else {
+                            if (outcome.length === 0) {
+                                resolve(outcome);
+                                return false;
+                            }
 
                             //if model has relations then resolving when relation transactions are complete else resolving
                             if (model.hasWith) {
-                                _getWithAllData(resolve, reject, outcome, withTables);
-
-                            } else {
-                                resolve(outcome);
+                                withRealtionObject.getWithAllData(resolve, reject, outcome, withTables);
+                                return false;
                             }
+
+                            resolve(outcome);
+
                         }
                     });
                     return getId;
                 };
 
-                //function sets where not in values for model
-                model.whereNotIn = function (notInValues, sortAsNumbers) {
-
-                    sortAsNumbers = (sortAsNumbers === true) ? true : false;
-                    model.whereNotInValues = notInValues;
-
-                    model.isWhereNumber = sortAsNumbers; //setting whereNotInValues as number type
-
-                    _setOrderSettings(); //setting whereNotInValues as asc or desc type
-                    return model;
-                };
-
                 //wrapper function firing default put on the indexed db
                 model.put = function (data) {
                     var put = $q(function (resolve, reject) {
-                        try {
-
-                            connection = self.indexdb.open(self.name);
-                            connection.onsuccess = function (event) {
-
+                        self.open.then(function (event) {
+                            try {
                                 var db = event.target.result;
                                 transaction = db.transaction([table.name], "readwrite");
                                 objectStore = transaction.objectStore(table.name);
@@ -1315,11 +1218,13 @@ function indexeddbProvider($windowProvider) {
                                         resolve(data);
 
                                     } catch (exception) {
+                                        transaction.abort();
                                         reject(exception);
                                     }
                                 };
 
                                 objectStore.onerror = function (error) {
+                                    transaction.abort();
                                     reject(error);
                                 };
 
@@ -1327,14 +1232,13 @@ function indexeddbProvider($windowProvider) {
                                     reject(error);
                                 };
 
-                            };
+                            } catch (exception) {
+                                reject(exception);
+                            }
 
-                            connection.onerror = function (event) {
-                                reject(event.srcElement.error);
-                            };
-                        } catch (exception) {
-                            reject(exception);
-                        }
+                        }).catch(function (error) {
+                            reject(error);
+                        });
 
                     });
 
@@ -1347,62 +1251,64 @@ function indexeddbProvider($windowProvider) {
                         throw "Data must be type of object";
                     }
 
-                    var notInCaseInsensitiveArray = [];
-
                     var update = _get(function (event, resolve) {
+                        var count = 0;
                         var result = event.target.result;
                         var newValue;
 
                         if (result) {
 
+                            newValue = _updateValue(result.value, data);
+
                             //if model has filter
                             if (model.hasFilter) {
                                 if (model.filterFunction(result.value) !== true) {
                                     result.continue();
-                                    return;
+                                    return false;
                                 }
                             }
 
                             //checking for likeness in data
                             if (model.likeString !== null) {
-                                if (_checkLikeString(result.key) === false) {
+                                if (self.helper.checkLikeString(result.key, model.likeString, model.caseInsensitive) === false) {
                                     result.continue();
-                                    return;
+                                    return false;
                                 }
                             }
 
                             //first for whereIn model values then whereNotIn else default
                             if (model.whereInValues !== null) {
-                                _whereInUpdate(result, data);
-
-                            } else if (model.whereNotInValues !== null) {
-                                _whereNotInUpdate(result, notInCaseInsensitiveArray, data);
-
-                            } else {
-                                newValue = _updateValue(result.value, data);
-
-                                //setting with relation data to the record as well
-                                if (model.hasWith) {
-                                    newValue = _updateWithRelation(newValue, model.originalWithRelation);
+                                if (!self.helper.whereIn(result.key, model.whereInValues, model.caseInsensitive)) {
+                                    result.continue();
+                                    return false;
                                 }
 
-                                result.update(newValue);
-                                result.continue();
                             }
 
+                            if (model.whereNotInValues !== null) {
+                                if (!self.helper.whereNotIn(result.key, model.whereNotInValues, model.caseInsensitive)) {
+                                    result.continue();
+                                    return false;
+                                }
+
+                            }
+
+                            //setting with relation data to the record as well
+                            if (model.hasWith) {
+                                newValue = withRealtionObject.updateWithRelation(newValue, model.originalWithRelation);
+                            }
+
+                            result.update(newValue);
+                            count = count + 1;
+                            result.continue();
+
+
                         } else {
-                            resolve();
+                            resolve(count);
                         }
                     }, true);
 
                     return update;
-                };
-
-                //functions sets the filter for traversing
-                model.filter = function (filterFunction) {
-                    model.hasFilter = true;
-                    model.filterFunction = filterFunction;
-                    return model;
                 };
 
                 //wrapper for default delete in indexeddb
@@ -1413,10 +1319,8 @@ function indexeddbProvider($windowProvider) {
                     }
 
                     var deleteId = $q(function (resolve, reject) {
-                        try {
-
-                            connection = self.indexdb.open(self.name);
-                            connection.onsuccess = function (event) {
+                        self.open.then(function (event) {
+                            try {
 
                                 var db = event.target.result;
                                 var relations = {};
@@ -1443,26 +1347,28 @@ function indexeddbProvider($windowProvider) {
                                             resolve();
                                         }
                                     } catch (exception) {
+                                        transaction.abort();
                                         reject(exception);
                                     }
 
                                 };
 
                                 objectStore.onerror = function (error) {
+                                    transaction.abort();
                                     reject(error);
                                 };
 
                                 transaction.onerror = function (error) {
                                     reject(error);
                                 };
-                            };
 
-                            connection.onerror = function (error) {
-                                reject(error);
-                            };
-                        } catch (exception) {
-                            reject(exception);
-                        }
+                            } catch (exception) {
+                                reject(exception);
+                            }
+
+                        }).catch(function (error) {
+                            reject(error);
+                        });
                     });
 
                     return deleteId;
@@ -1470,7 +1376,7 @@ function indexeddbProvider($windowProvider) {
 
                 //function to delete on cursor location
                 model.destroy = function () {
-                    var notInCaseInsensitiveArray = [];
+                    var count = 0;
                     var deletedIds = [];
 
                     var del = _get(function (event, resolve, reject, relations) {
@@ -1487,30 +1393,39 @@ function indexeddbProvider($windowProvider) {
 
                             //checking for likeness in data
                             if (model.likeString !== null) {
-                                if (_checkLikeString(result.key) === false) {
+                                if (self.helper.checkLikeString(result.key, model.likeString, model.caseInsensitive) === false) {
                                     result.continue();
-                                    return;
+                                    return false;
                                 }
                             }
 
                             //first whereIn then whereNotIn else default destroy
                             if (model.whereInValues !== null) {
-                                _whereInDestroy(result, deletedIds);
-
-                            } else if (model.whereNotInValues !== null) {
-                                _wherNotInDestroy(result, notInCaseInsensitiveArray, deletedIds);
-
-                            } else {
-                                deletedIds.push(result.value[table.fields.keyPathField]);
-                                result.delete();
-                                result.continue();
+                                if (!self.helper.whereIn(result.key, model.whereInValues, model.caseInsensitive)) {
+                                    result.continue();
+                                    return false;
+                                }
                             }
+
+                            if (model.whereNotInValues !== null) {
+                                if (!self.helper.wherNotIn(result.key, model.whereNotInValues, model.caseInsensitive)) {
+                                    result.continue();
+                                    return false;
+                                }
+                            }
+
+                            deletedIds.push(result.value[table.fields.keyPathField]);
+                            result.delete();
+
+                            count = count + 1;
+                            result.continue();
+
                         } else {
 
                             if (model.hasWith) {
                                 _deleteWith(resolve, reject, deletedIds, relations, true);
                             } else {
-                                resolve();
+                                resolve(count);
                             }
                         }
                     }, true);
@@ -1518,27 +1433,6 @@ function indexeddbProvider($windowProvider) {
                     return del;
                 };
 
-                //query builder for with relations
-                model.withRelations = function (relations) {
-                    if (typeof relations !== 'object') {
-                        throw "WithRelation must be at type of object";
-                    }
-
-                    model.hasWith = true;
-                    model.originalWithRelation = relations; //keeping a record of original relation data
-                    model.withRelation = _setWithRelation(relations); //setting objects for using with relations
-
-                    return model;
-                };
-
-                model.like = function (likeString) {
-                    if (likeString === undefined) {
-                        throw "Invalid input given to like";
-                    }
-
-                    model.likeString = likeString.toString();
-                    return model;
-                };
             }
 
             //function sets the index configure values(unique/multientry)
