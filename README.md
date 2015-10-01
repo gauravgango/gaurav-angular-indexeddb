@@ -14,24 +14,40 @@ bower install angularjs-indexeddb
 ```
 
 ### Basic Usage
-Add 'indexed-db' to you module dependency list
+
+Add ```angular-indexeddb.min.js``` library to your project's ```index.html```
+
+```html
+<script src="js/angular-indexeddb.min.js" type="text/javascript">
+```
+
+Add ```indexed-db``` to you module dependency list
+
 ````javasript
-    angular.module('demo',['indexed-db']);
+
+    angular.module('myApp',['indexed-db']);
+    
 ````
 
 In your module config function state your database name, version and table schema
+
 ````javascript
-    angular.module('demo').config(function(indexeddvProvider){
-        indexeddbProvider.setDbName('test'); //your database name
-        indexeddbProvider.setDbVersion(1); //your database version
-        indexeddbProivder.setDbTables(tables); //table contains your schema for varios tables
+
+    angular.module('myApp').config(function(indexeddvProvider){
+        indexeddbProvider.setDbName('test'); // your database name
+        indexeddbProvider.setDbVersion(1); // your database version
+        indexeddbProivder.setDbTables(tables); //tables is the objects contains your schema for various tables
     }
+    
 ````
 
-###Dcumentation
-You can find documentation [here](http://github.com)
+### Documentation
+You can find documentation [here](https://github.com/gauravgango/gaurav-angular-indexeddb/wiki)
+
+
+### New to indexedDB ?
+* Follow [MDN Guide](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API)
 
 ### TODO
 * Add example/demo with some basic database operations
-* Add quick start to readme
 * Update wiki with recent changes
