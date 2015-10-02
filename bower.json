@@ -1,0 +1,29 @@
+{
+  "name": "gaurav-angular-indexeddb",
+  "version": "0.1.0",
+  "homepage": "https://github.com/gauravgango/gaurav-angular-indexeddb",
+  "authors": [
+    "gauravgango"
+  ],
+  "description": "IndexedDB wrapper for angular js",
+  "main": "src/angular-indexeddb.js",
+  "keywords": [
+    "indexeddb",
+    "angular"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "angular": ">=1.2.x"
+  },
+  "ignore": [
+    "**/.*",
+    "gulpfile.js",
+    "!README.md",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests",
+    "demo",
+    "example"
+  ]
+}
