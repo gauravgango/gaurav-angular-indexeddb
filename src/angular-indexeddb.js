@@ -49,6 +49,18 @@ function indexeddbProvider($windowProvider) {
                     resolve(event);
                 };
             });
+
+            self.openConnection = new $window.Promise(function (resolve, reject) {
+
+                var connection = self.indexdb.open(self.name);
+                connection.onerror = function (event) {
+                    reject(event);
+                };
+
+                connection.onsuccess = function (event) {
+                    resolve(event);
+                };
+            });
         }
 
         /**
@@ -615,7 +627,7 @@ function indexeddbProvider($windowProvider) {
                     var relations = {};
 
                     return $q(function (resolve, reject) {
-                        self.open.then(function (event) {
+                        self.openConnection.then(function (event) {
                             try {
                                 var db = event.target.result;
                                 //opening transaction
@@ -916,7 +928,7 @@ function indexeddbProvider($windowProvider) {
                 model.find = function () {
 
                     var getId = $q(function (resolve, reject) {
-                        self.open.then(function (event) {
+                        self.openConnection.then(function (event) {
                             var transactionTables = [];
                             var relations = {};
 
@@ -990,7 +1002,8 @@ function indexeddbProvider($windowProvider) {
                 model.add = function (data) {
 
                     var add = $q(function (resolve, reject) {
-                        self.open.then(function (event) {
+                        self.openConnection.then(function (event) {
+
                             var transactionTables = [];
                             var relations = {};
 
@@ -1064,7 +1077,7 @@ function indexeddbProvider($windowProvider) {
 
                     var add = $q(function (resolve, reject) {
 
-                        self.open.then(function (event) {
+                        self.openConnection.then(function (event) {
                             try {
 
                                 var db = event.target.result;
@@ -1194,7 +1207,7 @@ function indexeddbProvider($windowProvider) {
                 //wrapper function firing default put on the indexed db
                 model.put = function (data) {
                     var put = $q(function (resolve, reject) {
-                        self.open.then(function (event) {
+                        self.openConnection.then(function (event) {
                             try {
                                 var db = event.target.result;
                                 transaction = db.transaction([table.name], "readwrite");
@@ -1319,7 +1332,7 @@ function indexeddbProvider($windowProvider) {
                     }
 
                     var deleteId = $q(function (resolve, reject) {
-                        self.open.then(function (event) {
+                        self.openConnection.then(function (event) {
                             try {
 
                                 var db = event.target.result;
@@ -1485,9 +1498,13 @@ function indexeddbProvider($windowProvider) {
              * Private : function creates tables when upgrade function is fired
              * @param  {event.target.result} db [it of result of event of upgradedneeded]
              */
-            function _createTables(db) {
-                var objectStore, config;
+            function _createTables(target) {
+                var config, db, transaction;
+                db = target.result;
+                transaction = target.transaction;
+
                 self.tables.forEach(function (table) {
+                    var objectStore;
 
                     //if table does not exist then creating it
                     if (!db.objectStoreNames.contains(table.name)) {
@@ -1503,6 +1520,18 @@ function indexeddbProvider($windowProvider) {
                             var indexValue = _getIndexValue(field);
                             config = _getFieldConfig(field); //fetching configuration against the index
                             objectStore.createIndex(field.name, indexValue, config);
+                        });
+
+                    } else {
+                        objectStore = transaction.objectStore(table.name);
+
+                        //creating new fields/indexes
+                        table.fields.other.forEach(function (field) {
+                            var indexValue = _getIndexValue(field);
+                            config = _getFieldConfig(field); //fetching configuration against the index
+                            if (!objectStore.indexNames.contains(field.name)) {
+                                objectStore.createIndex(field.name, indexValue, config);
+                            }
                         });
                     }
 
@@ -1537,7 +1566,7 @@ function indexeddbProvider($windowProvider) {
                         throw "Field/Index name already exists";
                     }
 
-                    //pusghing to feildNames to check further fields of tables
+                    //pushing to feildNames to check further fields of tables
                     fieldNames.push(field.name);
 
                     //checking field for keyPath property
@@ -1588,7 +1617,7 @@ function indexeddbProvider($windowProvider) {
                         throw "Repeated Table/ObjectStore name " + table.name;
                     }
 
-                    //pusing to array to check further table names
+                    //pushing to array to check further table names
                     tableNames.push(table.name);
 
                     table.hasTimeStamp = false; //default timestamps value as false
@@ -1623,17 +1652,21 @@ function indexeddbProvider($windowProvider) {
             _setTables();
 
             self.open.then(function (event) {
-                var l, table;
-                //when database is being upgraded
-                if (event.type === "upgradeneeded") {
-                    _createTables(event.target.result);
+                try {
+                    var l, table;
+                    //when database is being upgraded
+                    if (event.type === "upgradeneeded") {
+                        _createTables(event.target);
+                    } else {
+                        for (l = self.tables.length - 1; l >= 0; l--) {
+                            table = self.tables[l];
+                            _createModelInstance(event.target.result, table);
 
-                } else {
-                    for (l = self.tables.length - 1; l >= 0; l--) {
-                        table = self.tables[l];
-                        _createModelInstance(event.target.result, table);
-
+                        }
                     }
+
+                } catch (exception) {
+                    qRej(exception);
                 }
                 qRes(self);
 
