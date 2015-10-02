@@ -233,9 +233,9 @@ function indexeddbProvider($windowProvider) {
 
                     withTables.forEach(function (tableName) {
                         //creating model for each instance
-                        var withTable = self.tables.find(function (exisitingTable) {
+                        var withTable = self.tables.filter(function (exisitingTable) {
                             return (exisitingTable.name === tableName);
-                        });
+                        })[0];
 
                         model.withTables[tableName] = new CreateModelBuilder(withTable);
                     });
@@ -473,9 +473,9 @@ function indexeddbProvider($windowProvider) {
                 };
 
                 withRealtionObject.setOutcome = function (outcome, withTableName, propertyName, relationsData, isFind) {
-                    var tableSchema = self.tables.find(function (tableObject) {
+                    var tableSchema = self.tables.filter(function (tableObject) {
                         return (tableObject.name === withTableName);
-                    });
+                    })[0];
 
                     if (isFind) {
                         outcome.Relations = outcome.Relations || {};
@@ -518,7 +518,7 @@ function indexeddbProvider($windowProvider) {
                     //setting default value for isFind
                     isFind = (isFind === undefined) ? false : isFind;
 
-                    var _id, withTablesCount, relationNames;
+                    var withTablesCount, relationNames;
 
                     relationNames = Object.keys(objectStoreTables); //getting relational table names
                     withTablesCount = relationNames.length;
@@ -527,8 +527,8 @@ function indexeddbProvider($windowProvider) {
 
                     //for each relational table
                     relationNames.forEach(function (withTableName) {
-
-                        //retrieving realtion values from main table
+                        var _id;
+                        //retrieving relation values from main table
                         _id = withRealtionObject.getRelationData(outcome, isFind, model.originalWithRelation[withTableName].field);
 
                         //if main table has no relation values then setting Relation status that relational table as empty array
