@@ -102,7 +102,7 @@ function indexeddbProvider($windowProvider) {
              * @param  {integer/string} result             [contains value to be checked against]
              * @param  {array} whereInValues      [whereIn values to search for]
              * @param  {boolean} useCaseInsensitive [override case sensitive search]
-             * @return {boolen}                    [true if exists in list]
+             * @return {boolean}                    [true if exists in list]
              */
             helper.whereIn = function (result, whereInValues, caseInsensitive) {
 
@@ -130,7 +130,7 @@ function indexeddbProvider($windowProvider) {
             };
 
             helper.setOrderSettings = function (inValues, isNumber, isDesc) {
-                //setting wherein, wherenot in as values of is desc for sorting
+                //setting wherein, where not in as values of is desc for sorting
                 if (isDesc) {
                     helperObject.isDesc = true;
                 }
@@ -149,12 +149,12 @@ function indexeddbProvider($windowProvider) {
             //sorting where in/ where not in as number
             helper.sortAsNumbers = function (a, b) {
 
-                //if desc then returning b-a for descesding values
+                //if desc then returning b-a for descending values
                 if (helperObject.isDesc) {
                     return (b - a);
                 }
 
-                //returinng ascending values
+                //returning ascending values
                 return (a - b);
             };
 
@@ -168,7 +168,7 @@ function indexeddbProvider($windowProvider) {
                     inValues.forEach(function (value) {
                         var lowerValue = helper.changeCase(angular.copy(value), false, true);
 
-                        //checking if current value doesnt exist in inValues while caseInsensitive
+                        //checking if current value doesn't exist in inValues while caseInsensitive
                         if (lowerValue === resultKey) {
                             exists = true;
                         }
@@ -221,9 +221,9 @@ function indexeddbProvider($windowProvider) {
                     model.whereNotInValues = null; //default whereNotInValues for whereNotIn
                     model.withTables = {}; //with tables structure
                     model.hasWith = false; //default has with relation status
-                    model.isDesc = false; //default descending travers set to false
-                    model.traverse = 'next'; //default travering set to ascending
-                    model.isWhereNumber = false; //default where claues not containing number
+                    model.isDesc = false; //default descending traverse set to false
+                    model.traverse = 'next'; //default traversing set to ascending
+                    model.isWhereNumber = false; //default where clause not containing number
                     model.originalWithRelation = null; //default original with relation data
                     model.likeString = null; //default likeString data
                 }
@@ -429,9 +429,9 @@ function indexeddbProvider($windowProvider) {
                 var model = this;
                 var transaction;
                 var objectStore;
-                var withRealtionObject = {};
+                var withRelationObject = {};
 
-                withRealtionObject.getRelationData = function (outcome, isFind, propertyName) {
+                withRelationObject.getRelationData = function (outcome, isFind, propertyName) {
                     var _id;
                     if (isFind) {
                         _id = angular.copy(outcome[propertyName]);
@@ -472,7 +472,7 @@ function indexeddbProvider($windowProvider) {
 
                 };
 
-                withRealtionObject.setOutcome = function (outcome, withTableName, propertyName, relationsData, isFind) {
+                withRelationObject.setOutcome = function (outcome, withTableName, propertyName, relationsData, isFind) {
                     var tableSchema = self.tables.filter(function (tableObject) {
                         return (tableObject.name === withTableName);
                     })[0];
@@ -514,7 +514,7 @@ function indexeddbProvider($windowProvider) {
                  * @param  {object}  objectStoreTables [with tables in transaction mode]
                  * @param  {Boolean} isFind            [true for find condition]
                  */
-                withRealtionObject.getWithAllData = function (resolve, reject, outcome, objectStoreTables, isFind) {
+                withRelationObject.getWithAllData = function (resolve, reject, outcome, objectStoreTables, isFind) {
                     //setting default value for isFind
                     isFind = (isFind === undefined) ? false : isFind;
 
@@ -529,11 +529,11 @@ function indexeddbProvider($windowProvider) {
                     relationNames.forEach(function (withTableName) {
                         var _id;
                         //retrieving relation values from main table
-                        _id = withRealtionObject.getRelationData(outcome, isFind, model.originalWithRelation[withTableName].field);
+                        _id = withRelationObject.getRelationData(outcome, isFind, model.originalWithRelation[withTableName].field);
 
                         //if main table has no relation values then setting Relation status that relational table as empty array
                         if (_id === false) {
-                            outcome = withRealtionObject.setOutcome(outcome, withTableName, model.originalWithRelation[withTableName].field, [], isFind);
+                            outcome = withRelationObject.setOutcome(outcome, withTableName, model.originalWithRelation[withTableName].field, [], isFind);
                             currentCount = currentCount + 1;
 
                             if (currentCount === withTablesCount) {
@@ -575,7 +575,7 @@ function indexeddbProvider($windowProvider) {
 
                                 } else {
                                     //when traversing is done
-                                    outcome = withRealtionObject.setOutcome(outcome, withTableName, model.originalWithRelation[withTableName].field, currentOutcome, isFind);
+                                    outcome = withRelationObject.setOutcome(outcome, withTableName, model.originalWithRelation[withTableName].field, currentOutcome, isFind);
 
                                     currentCount = currentCount + 1;
 
@@ -705,8 +705,8 @@ function indexeddbProvider($windowProvider) {
                 }
 
                 //private : function updates the relations indexes by adding new values
-                withRealtionObject.update = function (record, data) {
-                    //retrievinging properties to be updated
+                withRelationObject.update = function (record, data) {
+                    //retrieving properties to be updated
                     var properties = Object.keys(data);
 
                     properties.forEach(function (property) {
@@ -717,7 +717,7 @@ function indexeddbProvider($windowProvider) {
                         data[property].forEach(function (relation) {
                             //checking if relation already exists if not then adding
 
-                            //if relation is greter than or equla to zero then adding the relation
+                            //if relation is greater than or equal to zero then adding the relation
                             if (relation >= 0) {
                                 if (record[property].indexOf(relation) === -1) {
                                     record[property].push(relation);
@@ -743,7 +743,7 @@ function indexeddbProvider($windowProvider) {
                  * @param {object} objectStoreTables [with tables in transaction mode]
                  * @param {IDBTransaction} transaction       [transaction instance]
                  */
-                function _addWithData(resolve, reject, outcome, objectStoreTables, transaction) {
+                withRelationObject.add = function (resolve, reject, outcome, objectStoreTables, transaction) {
                     var withTablesCount, relationNames;
 
                     relationNames = Object.keys(objectStoreTables); //getting relational table names
@@ -839,7 +839,7 @@ function indexeddbProvider($windowProvider) {
                             reject(error);
                         };
                     });
-                }
+                };
 
                 /**
                  * private : function delete the record relation to other tables
@@ -849,7 +849,7 @@ function indexeddbProvider($windowProvider) {
                  * @param  {object}  objectStoreTables [with tables in transaction mode]
                  * @param  {Boolean} isDestroy         [for destroy mode]
                  */
-                function _deleteWith(resolve, reject, value, objectStoreTables, isDestroy) {
+                withRelationObject.destroy = function (resolve, reject, value, objectStoreTables, isDestroy, count) {
                     isDestroy = (isDestroy === undefined) ? false : isDestroy;
                     var withTablesCount, relationNames;
 
@@ -907,7 +907,7 @@ function indexeddbProvider($windowProvider) {
                                     currentCount = currentCount + 1;
 
                                     if (currentCount === withTablesCount) {
-                                        resolve();
+                                        resolve(count);
                                     }
                                 }
                             } catch (exception) {
@@ -922,7 +922,7 @@ function indexeddbProvider($windowProvider) {
                             reject(error);
                         };
                     });
-                }
+                };
 
                 //finds a single record according to value set (not case sensitive)
                 model.find = function () {
@@ -963,7 +963,7 @@ function indexeddbProvider($windowProvider) {
 
                                         //if with relationship was defined then
                                         if (model.hasWith) {
-                                            withRealtionObject.getWithAllData(resolve, reject, record.target.result, relations, true);
+                                            withRelationObject.getWithAllData(resolve, reject, record.target.result, relations, true);
                                             return false;
                                         }
 
@@ -1036,7 +1036,7 @@ function indexeddbProvider($windowProvider) {
                                         result[table.fields.keyPathField] = event.target.result;
 
                                         if (model.hasWith) {
-                                            _addWithData(resolve, reject, result, relations, transaction);
+                                            withRelationObject.add(resolve, reject, result, relations, transaction);
                                         } else {
                                             resolve(result);
 
@@ -1193,7 +1193,7 @@ function indexeddbProvider($windowProvider) {
 
                             //if model has relations then resolving when relation transactions are complete else resolving
                             if (model.hasWith) {
-                                withRealtionObject.getWithAllData(resolve, reject, outcome, withTables);
+                                withRelationObject.getWithAllData(resolve, reject, outcome, withTables);
                                 return false;
                             }
 
@@ -1219,6 +1219,11 @@ function indexeddbProvider($windowProvider) {
                                     if (data.createdAt === undefined) {
                                         data.createdAt = Date.parse(Date());
                                     }
+                                }
+
+                                if (data[table.fields.keyPathField] === undefined) {
+                                    transaction.abort();
+                                    reject(new Error("KeyPath field not provied for update"));
                                 }
 
                                 //firing put method
@@ -1264,8 +1269,8 @@ function indexeddbProvider($windowProvider) {
                         throw "Data must be type of object";
                     }
 
+                    var count = 0;
                     var update = _get(function (event, resolve) {
-                        var count = 0;
                         var result = event.target.result;
                         var newValue;
 
@@ -1308,7 +1313,7 @@ function indexeddbProvider($windowProvider) {
 
                             //setting with relation data to the record as well
                             if (model.hasWith) {
-                                newValue = withRealtionObject.updateWithRelation(newValue, model.originalWithRelation);
+                                newValue = withRelationObject.update(newValue, model.originalWithRelation);
                             }
 
                             result.update(newValue);
@@ -1330,7 +1335,7 @@ function indexeddbProvider($windowProvider) {
                     if (value === undefined) {
                         throw "Empty value provided for deleting";
                     }
-
+                    var objectStoreDelete;
                     var deleteId = $q(function (resolve, reject) {
                         self.openConnection.then(function (event) {
                             try {
@@ -1349,27 +1354,35 @@ function indexeddbProvider($windowProvider) {
                                 }
 
                                 objectStore = transaction.objectStore(table.name);
+                                objectStoreDelete = transaction.objectStore(table.name);
 
-                                objectStore = objectStore.delete(value); //firing default delete
-
-                                objectStore.onsuccess = function () {
-                                    try {
-                                        if (model.hasWith) {
-                                            _deleteWith(resolve, reject, value, relations);
-                                        } else {
-                                            resolve();
-                                        }
-                                    } catch (exception) {
-                                        transaction.abort();
-                                        reject(exception);
+                                objectStore.get(value).onsuccess = function (record) {
+                                    if (record.target.result === undefined) {
+                                        resolve(0);
+                                        return false;
                                     }
+                                    objectStoreDelete = objectStoreDelete.delete(value);
 
+                                    objectStoreDelete.onsuccess = function () {
+                                        try {
+                                            if (model.hasWith) {
+                                                withRelationObject.destroy(resolve, reject, value, relations, 1);
+                                            } else {
+                                                resolve(1);
+                                            }
+                                        } catch (exception) {
+                                            transaction.abort();
+                                            reject(exception);
+                                        }
+
+                                    };
+
+                                    objectStoreDelete.onerror = function (error) {
+                                        transaction.abort();
+                                        reject(error);
+                                    };
                                 };
 
-                                objectStore.onerror = function (error) {
-                                    transaction.abort();
-                                    reject(error);
-                                };
 
                                 transaction.onerror = function (error) {
                                     reject(error);
@@ -1436,7 +1449,7 @@ function indexeddbProvider($windowProvider) {
                         } else {
 
                             if (model.hasWith) {
-                                _deleteWith(resolve, reject, deletedIds, relations, true);
+                                withRelationObject.destroy(resolve, reject, deletedIds, relations, true, count);
                             } else {
                                 resolve(count);
                             }
