@@ -186,6 +186,43 @@ function indexeddbProvider($windowProvider) {
 
                 return false;
             };
+
+            helper.getPropertyValue = function (property, result) {
+                var propertyValue = angular.copy(result);
+                var i, properties;
+                properties = property.split('.');
+                if (properties.length > 1) {
+                    for (i = 0; i <= properties.length - 1; i++) {
+
+                        if (propertyValue[properties[i]] === undefined) {
+                            return undefined;
+                        }
+                        propertyValue = propertyValue[properties[i]];
+                    }
+
+                } else {
+                    propertyValue = propertyValue[properties[0]];
+                }
+
+                return propertyValue;
+            };
+
+
+            helper.maxValue = function (value1, value2) {
+                if (value1 >= value2) {
+                    return value1;
+                }
+
+                return value2;
+            };
+
+            helper.minValue = function (value1, value2) {
+                if (value1 <= value2) {
+                    return value1;
+                }
+
+                return value2;
+            };
         }
 
         /**
@@ -205,7 +242,7 @@ function indexeddbProvider($windowProvider) {
 
             /**
              * Class : class for maintaining builder functions of model
-             * @param {array} table [table to act against]
+             * @param {array} table [table to act against] aggregate
              */
             function CreateModelBuilder(table) {
                 var model = this;
@@ -421,15 +458,149 @@ function indexeddbProvider($windowProvider) {
 
                     return model;
                 };
+
+            }
+
+            function CreateAggregateBuilder(table) {
+                CreateModelBuilder.call(this, table);
+                var aggregate = this;
+
+                function _defaultModelSettings() {
+                    aggregate.sums = [];
+                    aggregate.mins = [];
+                    aggregate.maxs = [];
+                    aggregate.averages = [];
+                }
+
+                _defaultModelSettings();
+
+                aggregate.sum = function (property) {
+
+                    if (property === undefined) {
+                        property = (aggregate.index === null) ? table.fields.keyPathField : aggregate.index;
+                    }
+
+                    if (aggregate.sums.indexOf(property) === -1) {
+                        aggregate.sums.push(property);
+                    }
+
+                    return aggregate;
+                };
+
+                aggregate.min = function (property) {
+
+                    if (property === undefined) {
+                        property = (aggregate.index === null) ? table.fields.keyPathField : aggregate.index;
+                    }
+
+                    if (aggregate.mins.indexOf(property) === -1) {
+                        aggregate.mins.push(property);
+                    }
+
+
+                    return aggregate;
+                };
+
+                aggregate.max = function (property) {
+
+                    if (property === undefined) {
+                        property = (aggregate.index === null) ? table.fields.keyPathField : aggregate.index;
+                    }
+
+                    if (aggregate.maxs.indexOf(property) === -1) {
+                        aggregate.maxs.push(property);
+                    }
+
+                    return aggregate;
+                };
+
+                aggregate.average = function (property) {
+
+                    if (property === undefined) {
+                        property = (aggregate.index === null) ? table.fields.keyPathField : aggregate.index;
+                    }
+
+                    if (aggregate.averages.indexOf(property) === -1) {
+                        aggregate.averages.push(property);
+                    }
+
+                    return aggregate;
+                };
+
+                aggregate.custom = function (name, callback, endCallback) {
+
+                    if (typeof callback !== 'function') {
+                        throw "Custom aggregate first parameter must be a function";
+                    }
+
+                    if (endCallback !== undefined) {
+                        if (typeof endCallback !== 'function') {
+                            throw "Custom aggregate second parameter must be a function";
+                        }
+                    }
+
+                    var customObject = {};
+                    customObject.callback = callback;
+                    customObject.endCallback = endCallback;
+                    customObject.name = name;
+
+                    var testDuplicate = aggregate.customs.filter(function (custom) {
+                        return (custom.name === name);
+                    });
+
+                    if (testDuplicate.length !== 0) {
+                        throw "Repeated Custom aggregate name given : " + name;
+                    }
+
+                    aggregate.customs.push(customObject);
+
+                    return aggregate;
+                };
+
+
             }
 
             function CreateModel(table) {
-                CreateModelBuilder.apply(this, [table]);
+                CreateAggregateBuilder.apply(this, [table]);
 
                 var model = this;
                 var transaction;
                 var objectStore;
                 var withRelationObject = {};
+                var aggregateObject = {};
+
+                function _checkResult(result) {
+                    //if model has filter
+                    if (model.hasFilter) {
+                        if (model.filterFunction(result.value) !== true) {
+                            return false;
+                        }
+                    }
+
+                    //checking for likeness in data
+                    if (model.likeString !== null) {
+                        if (self.helper.checkLikeString(result.key, model.likeString, model.caseInsensitive) === false) {
+                            return false;
+                        }
+                    }
+
+                    //first for whereIn model values then whereNotIn else default
+                    if (model.whereInValues !== null) {
+                        if (!self.helper.whereIn(result.key, model.whereInValues, model.caseInsensitive)) {
+                            return false;
+                        }
+
+                    }
+
+                    if (model.whereNotInValues !== null) {
+                        if (!self.helper.whereNotIn(result.key, model.whereNotInValues, model.caseInsensitive)) {
+                            return false;
+                        }
+
+                    }
+
+                    return true;
+                }
 
                 withRelationObject.getRelationData = function (outcome, isFind, propertyName) {
                     var _id;
@@ -599,6 +770,116 @@ function indexeddbProvider($windowProvider) {
 
                 };
 
+                aggregateObject.getSums = function (outcome, result) {
+                    if (model.sums.length === 0) {
+                        return outcome;
+                    }
+
+                    outcome.sums = outcome.sums || {};
+
+                    model.sums.forEach(function (property) {
+                        outcome.sums[property] = (outcome.sums[property] === undefined) ? 0 : outcome.sums[property];
+                        var value = self.helper.getPropertyValue(property, result);
+                        if (typeof value === 'number') {
+                            outcome.sums[property] = outcome.sums[property] + value;
+                        }
+                    });
+
+                    return outcome;
+                };
+
+                aggregateObject.getMins = function (outcome, result) {
+                    if (model.mins.length === 0) {
+                        return outcome;
+                    }
+
+                    outcome.mins = outcome.mins || {};
+
+                    model.mins.forEach(function (property) {
+                        var value = self.helper.getPropertyValue(property, result);
+
+                        if (value === undefined) {
+                            return false;
+                        }
+
+                        outcome.mins[property] = (outcome.mins[property] === undefined) ? value : outcome.mins[property];
+
+                        outcome.mins[property] = self.helper.minValue(outcome.mins[property], value);
+                    });
+
+                    return outcome;
+                };
+
+                aggregateObject.getMaxs = function (outcome, result) {
+                    if (model.mins.length === 0) {
+                        return outcome;
+                    }
+
+                    outcome.maxs = outcome.maxs || {};
+
+                    model.maxs.forEach(function (property) {
+                        var value = self.helper.getPropertyValue(property, result);
+
+                        if (value === undefined) {
+                            return false;
+                        }
+
+                        outcome.maxs[property] = (outcome.maxs[property] === undefined) ? value : outcome.maxs[property];
+
+                        outcome.maxs[property] = self.helper.maxValue(outcome.maxs[property], value);
+                    });
+
+                    return outcome;
+                };
+
+                aggregateObject.getAverages = function (outcome, resultOrCount, finalCalculation) {
+                    if (model.averages.length === 0) {
+                        return outcome;
+                    }
+
+                    outcome.averages = outcome.averages || {};
+
+                    model.averages.forEach(function (property) {
+                        if (finalCalculation === true) {
+                            outcome.averages[property] = outcome.averages[property] / resultOrCount;
+                            return false;
+                        }
+
+                        outcome.averages[property] = (outcome.averages[property] === undefined) ? 0 : outcome.averages[property];
+
+                        var value = self.helper.getPropertyValue(property, resultOrCount);
+
+                        if (typeof value === 'number') {
+                            outcome.averages[property] = outcome.averages[property] + value;
+                        }
+                    });
+
+                    return outcome;
+                };
+
+                aggregateObject.getCustoms = function (outcome, resultOrCount, finalCalculation) {
+                    if (model.customs.length === 0) {
+                        return outcome;
+                    }
+
+                    outcome.customs = outcome.customs || {};
+
+                    model.customs.forEach(function (customObject) {
+                        if (finalCalculation === true && customObject.endCallback !== undefined) {
+                            outcome.customs[customObject.name] = customObject.endCallback(outcome[customObject.name], resultOrCount);
+                            return false;
+                        }
+
+                        outcome.customs[customObject.name] = (outcome.customs[customObject.name] === undefined) ? 0 : outcome.customs[customObject.name];
+
+                        var value = self.helper.getPropertyValue(customObject.name, resultOrCount);
+
+                        outcome.customs[customObject.name] = customObject.callback(outcome.customs[customObject.name], value);
+                    });
+
+                    return outcome;
+                };
+
                 //private : function returns array of table names to perform transaction on
                 function _getTransactionTables() {
                     var transactionTables = [];
@@ -619,7 +900,6 @@ function indexeddbProvider($windowProvider) {
 
                 //private : wrapper for calling default getAll with callback for success
                 function _get(callback, readwrite) {
-
                     //setting read write status flag of transaction
                     var write = (readwrite === undefined || readwrite === false || readwrite === null) ? 'readonly' : 'readwrite';
 
@@ -1147,38 +1427,13 @@ function indexeddbProvider($windowProvider) {
                     var outcome = [];
 
                     var getId = _get(function (event, resolve, reject, withTables) {
+
                         var result = event.target.result;
 
                         if (result) {
-                            //if model has filter
-                            if (model.hasFilter) {
-                                if (model.filterFunction(result.value) !== true) {
-                                    result.continue();
-                                    return false;
-                                }
-                            }
-
-                            //checking for likeness in data
-                            if (model.likeString !== null) {
-                                if (self.helper.checkLikeString(result.key, model.likeString, model.caseInsensitive) === false) {
-                                    result.continue();
-                                    return false;
-                                }
-                            }
-
-                            //first checking if model has whereInValues then where not else default getAll
-                            if (model.whereInValues !== null) {
-                                if (!self.helper.whereIn(result.key, model.whereInValues, model.caseInsensitive)) {
-                                    result.continue();
-                                    return false;
-                                }
-                            }
-
-                            if (model.whereNotInValues !== null) {
-                                if (!self.helper.whereNotIn(result.key, model.whereNotInValues, model.caseInsensitive)) {
-                                    result.continue();
-                                    return false;
-                                }
+                            if (!_checkResult(result)) {
+                                result.continue();
+                                return false;
                             }
 
                             outcome.push(result.value);
@@ -1276,40 +1531,13 @@ function indexeddbProvider($windowProvider) {
 
                         if (result) {
 
+
+                            if (!_checkResult(result)) {
+                                result.continue();
+                                return false;
+                            }
+
                             newValue = _updateValue(result.value, data);
-
-                            //if model has filter
-                            if (model.hasFilter) {
-                                if (model.filterFunction(result.value) !== true) {
-                                    result.continue();
-                                    return false;
-                                }
-                            }
-
-                            //checking for likeness in data
-                            if (model.likeString !== null) {
-                                if (self.helper.checkLikeString(result.key, model.likeString, model.caseInsensitive) === false) {
-                                    result.continue();
-                                    return false;
-                                }
-                            }
-
-                            //first for whereIn model values then whereNotIn else default
-                            if (model.whereInValues !== null) {
-                                if (!self.helper.whereIn(result.key, model.whereInValues, model.caseInsensitive)) {
-                                    result.continue();
-                                    return false;
-                                }
-
-                            }
-
-                            if (model.whereNotInValues !== null) {
-                                if (!self.helper.whereNotIn(result.key, model.whereNotInValues, model.caseInsensitive)) {
-                                    result.continue();
-                                    return false;
-                                }
-
-                            }
 
                             //setting with relation data to the record as well
                             if (model.hasWith) {
@@ -1409,35 +1637,9 @@ function indexeddbProvider($windowProvider) {
                         var result = event.target.result;
 
                         if (result) {
-                            //if model has filter
-                            if (model.hasFilter) {
-                                if (model.filterFunction(result.value) !== true) {
-                                    result.continue();
-                                    return;
-                                }
-                            }
-
-                            //checking for likeness in data
-                            if (model.likeString !== null) {
-                                if (self.helper.checkLikeString(result.key, model.likeString, model.caseInsensitive) === false) {
-                                    result.continue();
-                                    return false;
-                                }
-                            }
-
-                            //first whereIn then whereNotIn else default destroy
-                            if (model.whereInValues !== null) {
-                                if (!self.helper.whereIn(result.key, model.whereInValues, model.caseInsensitive)) {
-                                    result.continue();
-                                    return false;
-                                }
-                            }
-
-                            if (model.whereNotInValues !== null) {
-                                if (!self.helper.wherNotIn(result.key, model.whereNotInValues, model.caseInsensitive)) {
-                                    result.continue();
-                                    return false;
-                                }
+                            if (!_checkResult(result)) {
+                                result.continue();
+                                return false;
                             }
 
                             deletedIds.push(result.value[table.fields.keyPathField]);
@@ -1459,7 +1661,282 @@ function indexeddbProvider($windowProvider) {
                     return del;
                 };
 
+
+
+                /**
+                 * Class : Function contains definition for aggregation
+                 */
+                function CreateAggregate() {
+                    var aggregate = this;
+
+                    //function counts the number of records
+                    aggregate.count = function () {
+                        var count = 0;
+
+                        var c = _get(function (event, resolve) {
+                            var result = event.target.result;
+
+                            //if record exists
+                            if (result) {
+
+                                //passing result through filter
+                                if (!_checkResult(result)) {
+                                    result.continue();
+                                    return false;
+                                }
+
+                                count = count + 1;
+                                result.continue();
+                            } else {
+                                resolve(count);
+                            }
+
+                        });
+
+                        return c;
+                    };
+
+                    //function calculates sum of records against the property if its value is numeric
+                    aggregate.sum = function (property) {
+                        var value;
+                        var sum = 0;
+
+                        //if property is undefined then taking model index or the keyPath field
+                        if (property === undefined) {
+                            property = (model.index === null) ? table.fields.keyPathField : model.index;
+                        }
+
+                        var c = _get(function (event, resolve) {
+                            var result = event.target.result;
+
+                            //if record exists
+                            if (result) {
+
+                                //passing result through filter
+                                if (!_checkResult(result)) {
+                                    result.continue();
+                                    return false;
+                                }
+
+                                //getting the value at the property
+                                value = self.helper.getPropertyValue(property, result.value);
+
+                                if (typeof value === 'number') {
+                                    sum = sum + value;
+                                }
+                                result.continue();
+
+                            } else {
+                                resolve(sum);
+                            }
+
+                        });
+
+                        return c;
+                    };
+
+                    //function retrieves the max value at the property
+                    aggregate.max = function (property) {
+                        var value;
+                        var max = null;
+
+                        //if property is undefined then taking model index or the keyPath field
+                        if (property === undefined) {
+                            property = (model.index === null) ? table.fields.keyPathField : model.index;
+                        }
+
+                        var m = _get(function (event, resolve) {
+                            var result = event.target.result;
+
+                            //if record exists
+                            if (result) {
+
+                                //passing result through filter
+                                if (!_checkResult(result)) {
+                                    result.continue();
+                                    return false;
+                                }
+
+                                value = self.helper.getPropertyValue(property, result.value);
+
+                                //if pointer is at first record then setting the value of max as that else checking
+                                if (value !== undefined) {
+                                    max = (max === null) ? value : self.helper.maxValue(max, value);
+                                }
+                                result.continue();
+
+                            } else {
+                                resolve(max);
+                            }
+
+                        });
+
+                        return m;
+                    };
+
+                    //function calculates the min value of property
+                    aggregate.min = function (property) {
+                        var value;
+                        var min = null;
+
+                        //if property is undefined then taking model index or the keyPath field
+                        if (property === undefined) {
+                            property = (model.index === null) ? table.fields.keyPathField : model.index;
+                        }
+
+                        var m = _get(function (event, resolve) {
+                            var result = event.target.result;
+
+                            //if record exists
+                            if (result) {
+
+                                //passing result through filter
+                                if (!_checkResult(result)) {
+                                    result.continue();
+                                    return false;
+                                }
+
+                                value = self.helper.getPropertyValue(property, result.value);
+
+                                //if pointer is at first record then setting the value of min as that else checking
+                                if (value !== undefined) {
+                                    min = (min === null) ? value : self.helper.minValue(min, value);
+                                }
+                                result.continue();
+
+                            } else {
+                                resolve(min);
+                            }
+
+                        });
+
+                        return m;
+                    };
+
+                    aggregate.average = function (property) {
+                        var value;
+                        var average = 0,
+                            sum = 0,
+                            count = 0;
+
+                        if (property === undefined) {
+                            property = (model.index === null) ? table.fields.keyPathField : model.index;
+                        }
+
+                        var a = _get(function (event, resolve) {
+                            var result = event.target.result;
+
+                            //if record exists
+                            if (result) {
+
+                                //passing result through filter
+                                if (!_checkResult(result)) {
+                                    result.continue();
+                                    return false;
+                                }
+
+                                count++;
+
+                                value = self.helper.getPropertyValue(property, result.value);
+                                if (typeof value === 'number') {
+                                    sum = sum + value;
+                                }
+
+                                result.continue();
+
+                            } else {
+                                average = (sum === 0 && count === 0) ? 0 : sum / count;
+                                resolve(average);
+                            }
+
+                        });
+
+                        return a;
+                    };
+
+                    aggregate.custom = function (callback, endCallback) {
+                        if (typeof callback !== 'function') {
+                            throw "Parameter passed to custom aggregate must be of function type";
+                        }
+
+                        var outcome = 0;
+
+                        var cust = _get(function (event, resolve, reject) {
+                            var result = event.target.result;
+
+                            if (result) {
+                                //passing result through filter
+                                if (!_checkResult(result)) {
+                                    result.continue();
+                                    return false;
+                                }
+
+                                try {
+                                    outcome = callback(outcome, angular.copy(result.value));
+                                } catch (exception) {
+                                    transaction.abort();
+                                    reject(exception);
+                                    return false;
+                                }
+
+                                result.continue();
+
+                            } else {
+                                if (typeof endCallback === 'function') {
+                                    outcome = endCallback(outcome);
+                                }
+
+                                resolve(outcome);
+                            }
+                        });
+
+                        return cust;
+                    };
+                }
+
+                model.getAggregate = function () {
+                    var count = 0;
+                    var outcome = {};
+
+                    var ag = _get(function (event, resolve, reject) {
+                        var result = event.target.result;
+
+                        if (result) {
+                            //passing result through filter
+                            if (!_checkResult(result)) {
+                                result.continue();
+                                return false;
+                            }
+
+                            count = count + 1;
+
+                            try {
+                                outcome = aggregateObject.getSums(outcome, result.value);
+                                outcome = aggregateObject.getAverages(outcome, result.value, false);
+                                outcome = aggregateObject.getMins(outcome, result.value);
+                                outcome = aggregateObject.getMaxs(outcome, result.value);
+                                outcome = aggregateObject.getCustoms(outcome, result.value, false);
+
+                            } catch (exception) {
+                                reject(exception);
+                            }
+
+
+                            result.continue();
+                        } else {
+                            outcome = aggregateObject.getAverages(outcome, count, true);
+                            outcome = aggregateObject.getCustoms(outcome, count, true);
+                            resolve(outcome);
+                        }
+                    });
+
+                    return ag;
+                };
+
+                model.aggregate = new CreateAggregate();
+
             }
+
 
             //function sets the index configure values(unique/multientry)
             function _getFieldConfig(field) {
