@@ -35,6 +35,7 @@ function indexeddbProvider($windowProvider) {
 
             _check();
 
+            //connection opening for updating database
             self.open = new $window.Promise(function (resolve, reject) {
 
                 var connection = self.indexdb.open(self.name, self.version);
@@ -50,6 +51,7 @@ function indexeddbProvider($windowProvider) {
                 };
             });
 
+            //open database in default version
             self.openConnection = new $window.Promise(function (resolve, reject) {
 
                 var connection = self.indexdb.open(self.name);
@@ -187,13 +189,14 @@ function indexeddbProvider($windowProvider) {
                 return false;
             };
 
+            //function takes in string values in dotted format and returns the value at the result param
             helper.getPropertyValue = function (property, result) {
                 var propertyValue = angular.copy(result);
                 var i, properties;
                 properties = property.split('.');
                 if (properties.length > 1) {
                     for (i = 0; i <= properties.length - 1; i++) {
-
+                        //if any of the property value is undefined then returning
                         if (propertyValue[properties[i]] === undefined) {
                             return undefined;
                         }
@@ -208,6 +211,7 @@ function indexeddbProvider($windowProvider) {
             };
 
 
+            //compares two values and returns the larger one
             helper.maxValue = function (value1, value2) {
                 if (value1 >= value2) {
                     return value1;
@@ -216,6 +220,7 @@ function indexeddbProvider($windowProvider) {
                 return value2;
             };
 
+            //compares two values and returns the smaller one
             helper.minValue = function (value1, value2) {
                 if (value1 <= value2) {
                     return value1;
@@ -308,6 +313,7 @@ function indexeddbProvider($windowProvider) {
                     return model;
                 };
 
+                //function traverse through reverse order i.e descending
                 model.orderDesc = function (isDesc) {
                     model.isDesc = false;
                     model.traverse = 'next';
@@ -461,19 +467,26 @@ function indexeddbProvider($windowProvider) {
 
             }
 
+            /**
+             * Class : Definition for aggregation builder
+             * @param {object} table [table/Object store of model]
+             */
             function CreateAggregateBuilder(table) {
                 CreateModelBuilder.call(this, table);
                 var aggregate = this;
 
+                //function sets the default state of aggregate builder
                 function _defaultModelSettings() {
                     aggregate.sums = [];
                     aggregate.mins = [];
                     aggregate.maxs = [];
                     aggregate.averages = [];
+                    aggregate.customs = [];
                 }
 
                 _defaultModelSettings();
 
+                //function registers a sum aggregate against the property
                 aggregate.sum = function (property) {
 
                     if (property === undefined) {
@@ -487,6 +500,7 @@ function indexeddbProvider($windowProvider) {
                     return aggregate;
                 };
 
+                //function registers a min aggregate against the property
                 aggregate.min = function (property) {
 
                     if (property === undefined) {
@@ -501,6 +515,7 @@ function indexeddbProvider($windowProvider) {
                     return aggregate;
                 };
 
+                //function registers a max aggregate against the property
                 aggregate.max = function (property) {
 
                     if (property === undefined) {
@@ -514,6 +529,7 @@ function indexeddbProvider($windowProvider) {
                     return aggregate;
                 };
 
+                //function registers a average aggregate against the property
                 aggregate.average = function (property) {
 
                     if (property === undefined) {
@@ -527,15 +543,21 @@ function indexeddbProvider($windowProvider) {
                     return aggregate;
                 };
 
+                //function registers a custom aggregate against the property
                 aggregate.custom = function (name, callback, endCallback) {
 
+                    //checking various parameters before continuing
+                    if (typeof name !== 'string') {
+                        throw "Custom aggregate first parameter must be a string";
+                    }
+
                     if (typeof callback !== 'function') {
-                        throw "Custom aggregate first parameter must be a function";
+                        throw "Custom aggregate second parameter must be a function";
                     }
 
                     if (endCallback !== undefined) {
                         if (typeof endCallback !== 'function') {
-                            throw "Custom aggregate second parameter must be a function";
+                            throw "Custom aggregate third parameter must be a function";
                         }
                     }
 
@@ -560,6 +582,10 @@ function indexeddbProvider($windowProvider) {
 
             }
 
+            /**
+             * Class : Final builder class that fires various action in promises
+             * @param {object} table [table/object store of model]
+             */
             function CreateModel(table) {
                 CreateAggregateBuilder.apply(this, [table]);
 
@@ -569,6 +595,11 @@ function indexeddbProvider($windowProvider) {
                 var withRelationObject = {};
                 var aggregateObject = {};
 
+                /**
+                 * Function checks result against various model filters
+                 * @param  {IDBCursor} result [contains the IDBCursor value against the current record]
+                 * @return {boolean}        [true if passes all]
+                 */
                 function _checkResult(result) {
                     //if model has filter
                     if (model.hasFilter) {
@@ -602,6 +633,7 @@ function indexeddbProvider($windowProvider) {
                     return true;
                 }
 
+                //function : withRelation action to retrieve all relational data in main outcome 
                 withRelationObject.getRelationData = function (outcome, isFind, propertyName) {
                     var _id;
                     if (isFind) {
@@ -643,6 +675,8 @@ function indexeddbProvider($windowProvider) {
 
                 };
 
+                //function sets outcome value by setting with Relation property or relational table
+                //and sets checks if the relation exists in main outcome
                 withRelationObject.setOutcome = function (outcome, withTableName, propertyName, relationsData, isFind) {
                     var tableSchema = self.tables.filter(function (tableObject) {
                         return (tableObject.name === withTableName);
@@ -770,6 +804,7 @@ function indexeddbProvider($windowProvider) {
 
                 };
 
+                //function : calculates aggregate of sum against all sum set
                 aggregateObject.getSums = function (outcome, result) {
                     if (model.sums.length === 0) {
                         return outcome;
@@ -788,6 +823,7 @@ function indexeddbProvider($windowProvider) {
                     return outcome;
                 };
 
+                //function : calculates aggregate of min against all min set
                 aggregateObject.getMins = function (outcome, result) {
                     if (model.mins.length === 0) {
                         return outcome;
@@ -810,6 +846,7 @@ function indexeddbProvider($windowProvider) {
                     return outcome;
                 };
 
+                //function : calculates aggregate of max against all max set
                 aggregateObject.getMaxs = function (outcome, result) {
                     if (model.mins.length === 0) {
                         return outcome;
@@ -832,6 +869,7 @@ function indexeddbProvider($windowProvider) {
                     return outcome;
                 };
 
+                //function : calculates aggregate of averages against all averages set
                 aggregateObject.getAverages = function (outcome, resultOrCount, finalCalculation) {
                     if (model.averages.length === 0) {
                         return outcome;
@@ -857,6 +895,7 @@ function indexeddbProvider($windowProvider) {
                     return outcome;
                 };
 
+                //function : calculates aggregate of custom functions against all custom functions set
                 aggregateObject.getCustoms = function (outcome, resultOrCount, finalCalculation) {
                     if (model.customs.length === 0) {
                         return outcome;
