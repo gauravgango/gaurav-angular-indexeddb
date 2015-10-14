@@ -194,6 +194,7 @@ function indexeddbProvider($windowProvider) {
                 var propertyValue = angular.copy(result);
                 var i, properties;
                 properties = property.split('.');
+
                 if (properties.length > 1) {
                     for (i = 0; i <= properties.length - 1; i++) {
                         //if any of the property value is undefined then returning
@@ -268,6 +269,10 @@ function indexeddbProvider($windowProvider) {
                     model.isWhereNumber = false; //default where clause not containing number
                     model.originalWithRelation = null; //default original with relation data
                     model.likeString = null; //default likeString data
+                    model.andObject = null; //default andObject data
+                    model.orObject = null; //default orObject data
+                    model.inObject = null; //default inObject data
+                    model.notInObject = null; //default notInObject data
                 }
 
                 function _setWithRelation(relations) {
@@ -465,6 +470,109 @@ function indexeddbProvider($windowProvider) {
                     return model;
                 };
 
+                //query builder for 
+                model.whereOther = function (andObject, orObject, inObject, notInObject) {
+                    andObject = andObject || {};
+                    orObject = orObject || {};
+                    inObject = inObject || {};
+                    notInObject = notInObject || {};
+
+                    if (typeof andObject !== 'object') {
+                        throw "Invalid argument provided. Argument must be of object type";
+                    }
+
+                    if (typeof orObject !== 'object') {
+                        throw "Invalid argument provided. Argument must be of object type";
+                    }
+
+                    model.andObject = andObject;
+                    model.orObject = orObject;
+                    model.inObject = inObject;
+                    model.notInObject = notInObject;
+
+                    return model;
+                };
+
+                model.whereOtherAnd = function (propertyName, propertyValue) {
+                    var andObject = {};
+                    if (typeof propertyName !== "string") {
+                        throw "Invalid first argument. Property name must be a string";
+                    }
+
+                    if (model.andObject === null) {
+                        model.andObject = [];
+                    }
+
+                    andObject.propertyName = propertyName;
+                    andObject.propertyValue = propertyValue;
+
+                    model.andObject.push(andObject);
+
+                    return model;
+                };
+
+                model.whereOtherOr = function (propertyName, propertyValue) {
+                    var orObject = {};
+                    if (typeof propertyName !== "string") {
+                        throw "Invalid first argument. Property name must be a string";
+                    }
+
+                    if (model.orObject === null) {
+                        model.orObject = [];
+                    }
+
+                    orObject.propertyName = propertyName;
+                    orObject.propertyValue = propertyValue;
+
+                    model.orObject.push(orObject);
+
+                    return model;
+                };
+
+                model.whereOtherIn = function (propertyName, propertyValue) {
+                    var inObject = {};
+                    if (typeof propertyName !== "string") {
+                        throw "Invalid first argument. Property name must be a string";
+                    }
+
+                    if (propertyValue.constructor !== Array) {
+                        throw "Invalid second argument. Property value must be an array";
+                    }
+
+                    if (model.inObject === null) {
+                        model.inObject = [];
+                    }
+
+                    inObject.propertyName = propertyName;
+                    inObject.propertyValue = propertyValue;
+
+                    model.inObject.push(inObject);
+
+                    return model;
+                };
+
+                model.whereOtherNotIn = function (propertyName, propertyValue) {
+                    var notInObject = {};
+                    if (typeof propertyName !== "string") {
+                        throw "Invalid first argument. Property name must be a string";
+                    }
+
+                    if (propertyValue.constructor !== Array) {
+                        throw "Invalid second argument. Property value must be an array";
+                    }
+
+                    if (model.notInObject === null) {
+                        model.notInObject = [];
+                    }
+
+                    notInObject.propertyName = propertyName;
+                    notInObject.propertyValue = propertyValue;
+
+                    model.notInObject.push(notInObject);
+
+                    return model;
+                };
+
             }
 
             /**
@@ -601,6 +709,11 @@ function indexeddbProvider($windowProvider) {
                  * @return {boolean}        [true if passes all]
                  */
                 function _checkResult(result) {
+                    var i, propertyValue, andStatus, orStatus, hasAnd, property;
+                    andStatus = true;
+                    orStatus = false;
+                    hasAnd = false;
+
                     //if model has filter
                     if (model.hasFilter) {
                         if (model.filterFunction(result.value) !== true) {
@@ -628,6 +741,94 @@ function indexeddbProvider($windowProvider) {
                             return false;
                         }
 
+                    }
+
+                    //checking other values as where not in conditions
+                    if (model.inObject !== null) {
+
+                        //for each condition set against the value
+                        for (i = model.inObject.length - 1; i >= 0; i--) {
+                            property = model.inObject[i];
+
+                            //fetching value at that propery in main result
+                            propertyValue = self.helper.getPropertyValue(property.propertyName, result.value);
+
+                            //if property value is undefined then returning false
+                            if (propertyValue === undefined) {
+                                return false;
+                            }
+
+                            if (!self.helper.whereIn(propertyValue, property.propertyValue, model.caseInsensitive)) {
+                                return false;
+                            }
+
+                        }
+                    }
+
+                    //checking other values as where in conditions
+                    if (model.notInObject !== null) {
+
+                        //for each condition set against the value
+                        for (i = model.notInObject.length - 1; i >= 0; i--) {
+                            property = model.notInObject[i];
+
+                            //fetching value at that propery in main result
+                            propertyValue = self.helper.getPropertyValue(property.propertyName, result.value);
+
+                            //if property value is undefined then returning false
+                            if (propertyValue === undefined) {
+                                continue;
+                            }
+
+                            if (!self.helper.whereNotIn(propertyValue, property.propertyValue, model.caseInsensitive)) {
+                                return false;
+                            }
+
+                        }
+                    }
+
+                    //checking other values as and conditions
+                    if (model.andObject !== null) {
+
+                        hasAnd = true;
+
+                        for (i = model.andObject.length - 1; i >= 0; i--) {
+                            property = model.andObject[i];
+
+                            propertyValue = self.helper.getPropertyValue(property.propertyName, result.value);
+
+                            if (propertyValue === undefined || propertyValue !== property.propertyValue) {
+                                andStatus = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (model.orObject !== null) {
+                        orStatus = false;
+
+                        if (!hasAnd) {
+                            andStatus = false;
+                            if (model.orObject.length === 0) {
+                                return true;
+                            }
+                        }
+
+
+                        for (i = model.orObject.length - 1; i >= 0; i--) {
+                            property = model.orObject[i];
+
+                            propertyValue = self.helper.getPropertyValue(property.propertyName, result.value);
+
+                            if (propertyValue !== undefined && propertyValue === property.propertyValue) {
+                                orStatus = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!(andStatus || orStatus)) {
+                        return false;
                     }
 
                     return true;
