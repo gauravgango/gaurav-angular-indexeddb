@@ -269,10 +269,6 @@ function indexeddbProvider($windowProvider) {
                     model.isWhereNumber = false; //default where clause not containing number
                     model.originalWithRelation = null; //default original with relation data
                     model.likeString = null; //default likeString data
-                    model.andObject = null; //default andObject data
-                    model.orObject = null; //default orObject data
-                    model.inObject = null; //default inObject data
-                    model.notInObject = null; //default notInObject data
                 }
 
                 function _setWithRelation(relations) {
@@ -470,109 +466,6 @@ function indexeddbProvider($windowProvider) {
                     return model;
                 };
 
-                //query builder for 
-                model.whereOther = function (andObject, orObject, inObject, notInObject) {
-                    andObject = andObject || {};
-                    orObject = orObject || {};
-                    inObject = inObject || {};
-                    notInObject = notInObject || {};
-
-                    if (typeof andObject !== 'object') {
-                        throw "Invalid argument provided. Argument must be of object type";
-                    }
-
-                    if (typeof orObject !== 'object') {
-                        throw "Invalid argument provided. Argument must be of object type";
-                    }
-
-                    model.andObject = andObject;
-                    model.orObject = orObject;
-                    model.inObject = inObject;
-                    model.notInObject = notInObject;
-
-                    return model;
-                };
-
-                model.whereOtherAnd = function (propertyName, propertyValue) {
-                    var andObject = {};
-                    if (typeof propertyName !== "string") {
-                        throw "Invalid first argument. Property name must be a string";
-                    }
-
-                    if (model.andObject === null) {
-                        model.andObject = [];
-                    }
-
-                    andObject.propertyName = propertyName;
-                    andObject.propertyValue = propertyValue;
-
-                    model.andObject.push(andObject);
-
-                    return model;
-                };
-
-                model.whereOtherOr = function (propertyName, propertyValue) {
-                    var orObject = {};
-                    if (typeof propertyName !== "string") {
-                        throw "Invalid first argument. Property name must be a string";
-                    }
-
-                    if (model.orObject === null) {
-                        model.orObject = [];
-                    }
-
-                    orObject.propertyName = propertyName;
-                    orObject.propertyValue = propertyValue;
-
-                    model.orObject.push(orObject);
-
-                    return model;
-                };
-
-                model.whereOtherIn = function (propertyName, propertyValue) {
-                    var inObject = {};
-                    if (typeof propertyName !== "string") {
-                        throw "Invalid first argument. Property name must be a string";
-                    }
-
-                    if (propertyValue.constructor !== Array) {
-                        throw "Invalid second argument. Property value must be an array";
-                    }
-
-                    if (model.inObject === null) {
-                        model.inObject = [];
-                    }
-
-                    inObject.propertyName = propertyName;
-                    inObject.propertyValue = propertyValue;
-
-                    model.inObject.push(inObject);
-
-                    return model;
-                };
-
-                model.whereOtherNotIn = function (propertyName, propertyValue) {
-                    var notInObject = {};
-                    if (typeof propertyName !== "string") {
-                        throw "Invalid first argument. Property name must be a string";
-                    }
-
-                    if (propertyValue.constructor !== Array) {
-                        throw "Invalid second argument. Property value must be an array";
-                    }
-
-                    if (model.notInObject === null) {
-                        model.notInObject = [];
-                    }
-
-                    notInObject.propertyName = propertyName;
-                    notInObject.propertyValue = propertyValue;
-
-                    model.notInObject.push(notInObject);
-
-                    return model;
-                };
-
             }
 
             /**
@@ -686,16 +579,217 @@ function indexeddbProvider($windowProvider) {
 
                     return aggregate;
                 };
-
-
             }
 
+            /**
+             * Function defines query builder for other attributes not being searched by index
+             * @param {object} table [table information]
+             */
+            function CreateOtherBuilder(table) {
+                CreateAggregateBuilder.apply(this, [table]);
+
+                var model = this;
+
+                //function sets the default state of other builder
+                function _defaultModelSettings() {
+                    model.andObject = null; //default andObject data
+                    model.orObject = null; //default orObject data
+                    model.inObject = null; //default inObject data
+                    model.notInObject = null; //default notInObject data
+                    model.likeObject = null; //default likeOther data
+                    model.gtObject = null; //default gtOther data
+                    model.gteObject = null; //default gteOther data
+                    model.ltObject = null; //default ltOther data
+                    model.lteObject = null; //default lteOther data
+                }
+
+                _defaultModelSettings();
+
+                //and query builder
+                model.whereOtherAnd = function (propertyName, propertyValue) {
+                    var andObject = {};
+                    if (typeof propertyName !== "string") {
+                        throw "Invalid first argument. Property name must be a string";
+                    }
+
+                    if (model.andObject === null) {
+                        model.andObject = [];
+                    }
+
+                    andObject.propertyName = propertyName;
+                    andObject.propertyValue = propertyValue;
+
+                    model.andObject.push(andObject);
+
+                    return model;
+                };
+
+                //or query builder
+                model.whereOtherOr = function (propertyName, propertyValue) {
+                    var orObject = {};
+                    if (typeof propertyName !== "string") {
+                        throw "Invalid first argument. Property name must be a string";
+                    }
+
+                    if (model.orObject === null) {
+                        model.orObject = [];
+                    }
+
+                    orObject.propertyName = propertyName;
+                    orObject.propertyValue = propertyValue;
+
+                    model.orObject.push(orObject);
+
+                    return model;
+                };
+
+                //where in query builder
+                model.whereOtherIn = function (propertyName, propertyValue) {
+                    var inObject = {};
+                    if (typeof propertyName !== "string") {
+                        throw "Invalid first argument. Property name must be a string";
+                    }
+
+                    if (propertyValue.constructor !== Array) {
+                        throw "Invalid second argument. Property value must be an array";
+                    }
+
+                    if (model.inObject === null) {
+                        model.inObject = [];
+                    }
+
+                    inObject.propertyName = propertyName;
+                    inObject.propertyValue = propertyValue;
+
+                    model.inObject.push(inObject);
+
+                    return model;
+                };
+
+                //where not in query builder
+                model.whereOtherNotIn = function (propertyName, propertyValue) {
+                    var notInObject = {};
+                    if (typeof propertyName !== "string") {
+                        throw "Invalid first argument. Property name must be a string";
+                    }
+
+                    if (propertyValue.constructor !== Array) {
+                        throw "Invalid second argument. Property value must be an array";
+                    }
+
+                    if (model.notInObject === null) {
+                        model.notInObject = [];
+                    }
+
+                    notInObject.propertyName = propertyName;
+                    notInObject.propertyValue = propertyValue;
+
+                    model.notInObject.push(notInObject);
+
+                    return model;
+                };
+
+                //like query builder
+                model.whereOtherLike = function (propertyName, propertyValue){
+                    var likeObject = {};
+                    if (typeof propertyName !== "string") {
+                        throw "Invalid first argument. Property name must be a string";
+                    }
+
+                    if (typeof propertyValue !== "string") {
+                        throw "Invalid second argument. Property value must be an string";
+                    }
+
+                    likeObject.propertyName = propertyName;
+                    likeObject.propertyValue = propertyValue;
+
+                    model.likeObject.push(likeObject);
+
+                    return model;
+                };
+
+                //greater then query builder
+                model.whereOtherGt = function (propertyName, propertyValue){
+                    var gtObject = {};
+                    if (typeof propertyName !== "string") {
+                        throw "Invalid first argument. Property name must be a string";
+                    }
+
+                    if (propertyValue === undefined || propertyValue === '') {
+                        throw "Invalid second argument. Property value cannot be empty";
+                    }
+
+                    gtObject.propertyName = propertyName;
+                    gtObject.propertyValue = propertyValue;
+
+                    model.gtObject.push(gtObject);
+
+                    return model;
+                };
+
+                //greater than equal query builder
+                model.whereOtherGte = function (propertyName, propertyValue){
+                    var gteObject = {};
+                    if (typeof propertyName !== "string") {
+                        throw "Invalid first argument. Property name must be a string";
+                    }
+
+                    if (propertyValue === undefined || propertyValue === '') {
+                        throw "Invalid second argument. Property value cannot be empty";
+                    }
+
+                    gteObject.propertyName = propertyName;
+                    gteObject.propertyValue = propertyValue;
+
+                    model.gteObject.push(gteObject);
+
+                    return model;
+                };
+
+                //less than equal query builder
+                model.whereOtherLte = function (propertyName, propertyValue){
+                    var lteObject = {};
+                    if (typeof propertyName !== "string") {
+                        throw "Invalid first argument. Property name must be a string";
+                    }
+
+                    if (propertyValue === undefined || propertyValue === '') {
+                        throw "Invalid second argument. Property value cannot be empty";
+                    }
+
+                    lteObject.propertyName = propertyName;
+                    lteObject.propertyValue = propertyValue;
+
+                    model.lteObject.push(lteObject);
+
+                    return model;
+                };
+
+                //less than query builder
+                model.whereOtherLt = function (propertyName, propertyValue){
+                    var ltObject = {};
+                    if (typeof propertyName !== "string") {
+                        throw "Invalid first argument. Property name must be a string";
+                    }
+
+                    if (propertyValue === undefined || propertyValue === '') {
+                        throw "Invalid second argument. Property value cannot be empty";
+                    }
+
+                    ltObject.propertyName = propertyName;
+                    ltObject.propertyValue = propertyValue;
+
+                    model.ltObject.push(ltObject);
+
+                    return model;
+                };
+            }
             /**
              * Class : Final builder class that fires various action in promises
              * @param {object} table [table/object store of model]
              */
             function CreateModel(table) {
-                CreateAggregateBuilder.apply(this, [table]);
+                CreateOtherBuilder.apply(this, [table]);
 
                 var model = this;
                 var transaction;
@@ -784,6 +878,96 @@ function indexeddbProvider($windowProvider) {
                                 return false;
                             }
 
+                        }
+                    }
+
+                    //checking other values as like condition
+                    if(model.likeObject !== null){
+
+                        for (i = model.likeObject.length - 1; i >= 0; i--) {
+                            property = model.likeObject[i];
+
+                            propertyValue = self.helper.getPropertyValue(property.propertyName, result.value);
+
+                            if (propertyValue === undefined) {
+                                return false;
+                            }
+
+                            if(!self.helper.checkLikeString(propertyValue, property.propertyValue, model.caseInsensitive)){
+                                return false;
+                            }
+                        }
+                    }
+
+                    //checking other values as greater than equal condition
+                    if(model.gteObject !== null){
+
+                        for (i = model.gteObject.length - 1; i >= 0; i--) {
+                            property = model.gteObject[i];
+
+                            propertyValue = self.helper.getPropertyValue(property.propertyName, result.value);
+
+                            if (propertyValue === undefined) {
+                                return false;
+                            }
+
+                            if(property.propertyValue < propertyValue){
+                                return false;
+                            }
+                        }
+                    }
+
+                    //checking other values as greater than condition
+                    if(model.gtObject !== null){
+
+                        for (i = model.gtObject.length - 1; i >= 0; i--) {
+                            property = model.gtObject[i];
+
+                            propertyValue = self.helper.getPropertyValue(property.propertyName, result.value);
+
+                            if (propertyValue === undefined) {
+                                return false;
+                            }
+
+                            if(property.propertyValue <= propertyValue){
+                                return false;
+                            }
+                        }
+                    }
+
+                    //checking other values as less than equal condition
+                    if(model.lteObject !== null){
+
+                        for (i = model.lteObject.length - 1; i >= 0; i--) {
+                            property = model.lteObject[i];
+
+                            propertyValue = self.helper.getPropertyValue(property.propertyName, result.value);
+
+                            if (propertyValue === undefined) {
+                                return false;
+                            }
+
+                            if(property.propertyValue > propertyValue){
+                                return false;
+                            }
+                        }
+                    }
+
+                    //checking other values as less than equal condition
+                    if(model.ltObject !== null){
+
+                        for (i = model.ltObject.length - 1; i >= 0; i--) {
+                            property = model.ltObject[i];
+
+                            propertyValue = self.helper.getPropertyValue(property.propertyName, result.value);
+
+                            if (propertyValue === undefined) {
+                                return false;
+                            }
+
+                            if(property.propertyValue >= propertyValue){
+                                return false;
+                            }
                         }
                     }
 
