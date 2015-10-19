@@ -700,6 +700,10 @@ function indexeddbProvider($windowProvider) {
                         throw "Invalid second argument. Property value must be an string";
                     }
 
+                    if (model.likeObject === null) {
+                        model.likeObject = [];
+                    }
+
                     likeObject.propertyName = propertyName;
                     likeObject.propertyValue = propertyValue;
 
@@ -717,6 +721,10 @@ function indexeddbProvider($windowProvider) {
 
                     if (propertyValue === undefined || propertyValue === '') {
                         throw "Invalid second argument. Property value cannot be empty";
+                    }
+
+                    if (model.gtObject === null) {
+                        model.gtObject = [];
                     }
 
                     gtObject.propertyName = propertyName;
@@ -738,6 +746,11 @@ function indexeddbProvider($windowProvider) {
                         throw "Invalid second argument. Property value cannot be empty";
                     }
 
+                    if (model.gteObject === null) {
+                        model.gteObject = [];
+                    }
+
+
                     gteObject.propertyName = propertyName;
                     gteObject.propertyValue = propertyValue;
 
@@ -755,6 +768,10 @@ function indexeddbProvider($windowProvider) {
 
                     if (propertyValue === undefined || propertyValue === '') {
                         throw "Invalid second argument. Property value cannot be empty";
+                    }
+
+                    if (model.lteObject === null) {
+                        model.lteObject = [];
                     }
 
                     lteObject.propertyName = propertyName;
@@ -776,6 +793,10 @@ function indexeddbProvider($windowProvider) {
                         throw "Invalid second argument. Property value cannot be empty";
                     }
 
+                    if (model.ltObject === null) {
+                        model.ltObject = [];
+                    }
+                    
                     ltObject.propertyName = propertyName;
                     ltObject.propertyValue = propertyValue;
 
