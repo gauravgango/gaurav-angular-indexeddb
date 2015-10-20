@@ -4,7 +4,8 @@
 
 [![Bower](https://img.shields.io/bower/v/angularjs-indexeddb.svg)]()
 [![Angular JS compatibility](https://img.shields.io/badge/angular->=1.2.x-green.svg)]()
-[![Dependencies](https://img.shields.io/david/dev/gauravgango/gaurav-angular-indexeddb.svg)]()
+[![Dependency Status](https://david-dm.org/gauravgango/gaurav-angular-indexeddb.svg)](https://david-dm.org/gauravgango/gaurav-angular-indexeddb)
+[![devDependency Status](https://david-dm.org/gauravgango/gaurav-angular-indexeddb/dev-status.svg)](https://david-dm.org/gauravgango/gaurav-angular-indexeddb#info=devDependencies)
 [![GitHub license](https://img.shields.io/github/license/gauravgango/gaurav-angular-indexeddb.svg)]()
 
 ### Installation via [Bower](http://bower.io)
