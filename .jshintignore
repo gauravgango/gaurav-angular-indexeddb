@@ -1,0 +1,6 @@
+# ignore all from node_modules
+node_modules/
+
+# ignore other folders
+dist/
+
