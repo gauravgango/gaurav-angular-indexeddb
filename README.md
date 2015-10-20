@@ -4,6 +4,9 @@
 
 [![Bower](https://img.shields.io/bower/v/angularjs-indexeddb.svg)]()
 [![Angular JS compatibility](https://img.shields.io/badge/angular->=1.2.x-green.svg)]()
+[![Dependency Status](https://david-dm.org/gauravgango/gaurav-angular-indexeddb.svg)](https://david-dm.org/gauravgango/gaurav-angular-indexeddb)
+[![devDependency Status](https://david-dm.org/gauravgango/gaurav-angular-indexeddb/dev-status.svg)](https://david-dm.org/gauravgango/gaurav-angular-indexeddb#info=devDependencies)
+
 
 ### Installation via [Bower](http://bower.io)
 
@@ -36,7 +39,7 @@ In your module config function state your database name, version and table schem
     angular.module('myApp').config(function(indexeddvProvider){
         indexeddbProvider.setDbName('test'); // your database name
         indexeddbProvider.setDbVersion(1); // your database version
-        indexeddbProivder.setDbTables(tables); //tables is the objects contains your schema for various tables
+        indexeddbProivder.setDbTables(tables); //tables is array of objects contains your schema for various tables
     }
     
 ````
@@ -58,4 +61,4 @@ You can find detailed documentation [here](https://github.com/gauravgango/gaurav
 #### License
 -------
 
-MIT [License](LICENSE.txt)
+MIT [License](LICENSE)
