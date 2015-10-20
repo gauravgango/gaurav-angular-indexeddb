@@ -24,3 +24,4 @@ node_modules/
 index.html
 app.js
 angular.min.js
+indexdb.js
