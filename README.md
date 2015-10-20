@@ -1,4 +1,4 @@
-# gaurav-angular-indexeddb
+# gaurav-Angular-IndexedDB
 
 > An indexedDB wrapper for Angular JS.
 
@@ -42,12 +42,20 @@ In your module config function state your database name, version and table schem
 ````
 
 ### Documentation
-You can find documentation [here](https://github.com/gauravgango/gaurav-angular-indexeddb/wiki)
+You can find detailed documentation [here](https://github.com/gauravgango/gaurav-angular-indexeddb/wiki)
 
 
-### New to indexedDB ?
+#### New to indexedDB ?
 * Follow [MDN Guide](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API)
+* IndexedDB browser support [status](http://caniuse.com/#feat=indexeddb)
 
-### TODO
+
+#### TODO
 * Add example/demo with some basic database operations
 * Update wiki with recent changes
+
+
+#### License
+-------
+
+MIT [License](LICENSE.txt)
