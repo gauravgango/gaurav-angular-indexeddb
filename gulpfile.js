@@ -25,8 +25,8 @@ var banner = ['/**',
     ' */',
     ''].join('\n');
 
-gulp.task('dist:clean', function (cb) {
-    del(paths.dist, {force: true}).then(cb(null))
+gulp.task('dist:clean', function () {
+    del.sync(paths.dist, {force: true});
 });
 
 
