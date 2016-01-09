@@ -36,7 +36,7 @@ In your module config function state your database name, version and table schem
 
 ````javascript
 
-    angular.module('myApp').config(function(indexeddvProvider){
+    angular.module('myApp').config(function(indexeddbProvider){
         indexeddbProvider.setDbName('test'); // your database name
         indexeddbProvider.setDbVersion(1); // your database version
         indexeddbProivder.setDbTables(tables); //tables is array of objects contains your schema for various tables
