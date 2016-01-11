@@ -3,21 +3,24 @@
 # http://git-scm.com/docs/gitignore
 
 # phpstorm, webstorm
-.idea
+.idea/
 
 # sublime and other ide
 .project
 *.sublime-project
 *.sublime-workspace
+.brackets.json
+_notes/
 
 # logs
 logs/
 *.log
 npm-debug.log*
+error_log
 
 
 # OS generated files
-Thumbs.db
+[Tt]humbs.db
 ehthumbs.db
 *~
 .*~
@@ -32,9 +35,11 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+
 # Folder config file
-Desktop.ini
-.DS_Store
+[Dd]esktop.ini
+*.DS_store
+.DS_store?
 
 
 # node packages
@@ -45,8 +50,11 @@ node_modules/
 # bower packages
 bower_components/
 
+# svn folders
+.svn
 
-#test files
+
+# Test files
 index.html
 app.js
 angular.min.js

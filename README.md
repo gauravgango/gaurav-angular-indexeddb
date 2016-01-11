@@ -26,7 +26,7 @@ Add ```angular-indexeddb.min.js``` library to your project's ```index.html```
 
 Add ```indexed-db``` to you module dependency list
 
-````javasript
+````javascript
 
     angular.module('myApp',['indexed-db']);
     
