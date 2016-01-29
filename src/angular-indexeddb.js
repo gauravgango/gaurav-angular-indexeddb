@@ -160,7 +160,7 @@ function indexeddbProvider($windowProvider) {
                 return (a - b);
             };
 
-            //function for where not in logic 
+            //function for where not in logic
             helper.whereNotIn = function (result, inValues, caseInsensitive) {
                 //case sensitive
                 if (caseInsensitive) {
@@ -354,7 +354,7 @@ function indexeddbProvider($windowProvider) {
                 model.setCaseInsensitive = function (value) {
                     var lower, upper, incUpper, incLower;
 
-                    value = (value === undefined || value === true) ? true : false;
+                    value = (value === undefined || value === true);
                     model.caseInsensitive = value;
 
                     //if model has been set to case insensitive and bound values are defined then
@@ -406,7 +406,7 @@ function indexeddbProvider($windowProvider) {
                 //where in model function for setting whereInValues
                 model.whereIn = function (inValues, sortAsNumbers) {
 
-                    sortAsNumbers = (sortAsNumbers === true) ? true : false;
+                    sortAsNumbers = (sortAsNumbers === true);
                     model.whereInValues = inValues;
 
                     model.isWhereNumber = sortAsNumbers; //setting whereIn as number type
@@ -421,7 +421,7 @@ function indexeddbProvider($windowProvider) {
                 //function sets where not in values for model
                 model.whereNotIn = function (notInValues, sortAsNumbers) {
 
-                    sortAsNumbers = (sortAsNumbers === true) ? true : false;
+                    sortAsNumbers = (sortAsNumbers === true);
                     model.whereNotInValues = notInValues;
 
                     model.isWhereNumber = sortAsNumbers; //setting whereNotInValues as number type
@@ -796,7 +796,7 @@ function indexeddbProvider($windowProvider) {
                     if (model.ltObject === null) {
                         model.ltObject = [];
                     }
-                    
+
                     ltObject.propertyName = propertyName;
                     ltObject.propertyValue = propertyValue;
 
@@ -1039,7 +1039,7 @@ function indexeddbProvider($windowProvider) {
                     return true;
                 }
 
-                //function : withRelation action to retrieve all relational data in main outcome 
+                //function : withRelation action to retrieve all relational data in main outcome
                 withRelationObject.getRelationData = function (outcome, isFind, propertyName) {
                     var _id;
                     if (isFind) {
@@ -2512,7 +2512,7 @@ function indexeddbProvider($windowProvider) {
                             if (keyPath === true) {
                                 throw "Error multiple keyPath defined in table " + tableName;
                             }
-                            //setting keyPath as this field 
+                            //setting keyPath as this field
                             newFields.keyPathField = field.name;
                             keyPath = true; //setting keyPath flag as keyPath has been defined
 
