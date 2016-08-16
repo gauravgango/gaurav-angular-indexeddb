@@ -22,17 +22,18 @@
     }
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "gulp:dist": "./node_modules/.bin/gulp dist"
   },
   "engines": {
-    "node": "0.12.x",
-    "npm": "~3.5.3"
+    "node": ">=0.12.15",
+    "npm": "^3.10.6"
   },
   "author": "gauravgango",
   "contributors": [
     {
-      "name": "ank91",
-      "url": "https://ank91.github.io"
+      "name": "ankurk91",
+      "url": "https://ankurk91.github.io"
     }
   ],
   "dependencies": {
@@ -40,14 +41,14 @@
   },
   "devDependencies": {
     "del": "^2.2.0",
-    "gulp": "~3.9.0",
-    "gulp-header": "^1.7.1",
-    "gulp-jshint": "^1.11.2",
+    "gulp": "~3.9.1",
+    "gulp-header": "^1.8.8",
+    "gulp-jshint": "^1.12.0",
     "gulp-rename": "^1.2.2",
-    "gulp-sourcemaps": "^1.5.1",
-    "gulp-uglify": "^1.4.2",
-    "gulp-util": "~3.0.6",
-    "jshint-stylish": "^2.0.1"
+    "gulp-sourcemaps": "^1.6.0",
+    "gulp-uglify": "^2.0.0",
+    "gulp-util": "~3.0.7",
+    "jshint-stylish": "^2.2.1"
   },
   "optionalDependencies": {}
 }

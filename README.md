@@ -8,12 +8,14 @@
 [![devDependency Status](https://david-dm.org/gauravgango/gaurav-angular-indexeddb/dev-status.svg)](https://david-dm.org/gauravgango/gaurav-angular-indexeddb#info=devDependencies)
 
 
-### Installation via [Bower](http://bower.io)
+### Installation
 
 ```bash
-
+# Install via bower
 bower install angularjs-indexeddb
 
+# Install via npm
+npm install git://github.com/gauravgango/gaurav-angular-indexeddb.git
 ```
 
 ### Basic Usage
@@ -59,6 +61,4 @@ You can find detailed documentation [here](https://github.com/gauravgango/gaurav
 
 
 #### License
--------
-
-MIT [License](LICENSE)
+MIT [License](LICENSE.txt)

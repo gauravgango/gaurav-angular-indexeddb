@@ -3,3 +3,5 @@
 .jshintrc
 gulpfile.js
 bower.json
+.jshintignore
+.github/
