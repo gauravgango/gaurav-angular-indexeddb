@@ -1,4 +1,4 @@
-# gaurav-Angular-IndexedDB
+# Angular-IndexedDB
 
 > An indexedDB wrapper for Angular JS.
 
@@ -42,7 +42,7 @@ In your module config function state your database name, version and table schem
         indexeddbProvider.setDbName('test'); // your database name
         indexeddbProvider.setDbVersion(1); // your database version
         indexeddbProvider.setDbTables(tables); //tables is array of objects contains your schema for various tables
-    }
+    })
     
 ````
 

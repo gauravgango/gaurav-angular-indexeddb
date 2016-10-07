@@ -17,7 +17,7 @@ insert_final_newline = true
 charset = utf-8
 trim_trailing_whitespace = true
 
-[*.json]
+[*.{scss,css,js,html,json}]
 indent_size = 2
 
 [*.md]
